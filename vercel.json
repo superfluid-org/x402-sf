@@ -1,20 +1,4 @@
 {
-  "version": 2,
-  "buildCommand": "pnpm build",
-  "installCommand": "pnpm install",
-  "framework": "nextjs",
-  "rootDirectory": "apps/website",
-  "functions": {
-    "api/facilitator.ts": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 60
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/facilitator"
-    }
-  ]
+  "version": 2
 }
 
