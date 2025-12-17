@@ -3,7 +3,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
-import { getAddress, isAddress, type Address, type Hash, type Hex } from "viem";
+import { getAddress, isAddress, formatUnits, type Address, type Hash, type Hex } from "viem";
 import {
   EIP3009_ABI,
   EIP3009_TYPES,
@@ -129,7 +129,12 @@ app.get("/resource", async (c) => {
       const v = parseInt(sig.slice(130, 132), 16);
       const totalPaid = BigInt(authorization.value);
       const executedTxs: Hash[] = [];
-    
+      
+      console.log("💰 [/resource] Received X-PAYMENT", {
+        from: paymentAccount,
+        totalPaidRaw: totalPaid.toString(),
+        totalPaidUSDC: formatUnits(totalPaid, 6),
+      });
       
       let amountToWrap: bigint;
       let fee: bigint;
@@ -155,6 +160,13 @@ app.get("/resource", async (c) => {
       executedTxs.push(transferTxHash);
       await publicClient.waitForTransactionReceipt({ hash: transferTxHash });
       
+      console.log("✅ [/resource] transferWithAuthorization", {
+        from: paymentAccount,
+        to: facilitatorAddress,
+        totalPaidUSDC: formatUnits(totalPaid, 6),
+        txHash: transferTxHash,
+      });
+      
       // 2. Approve (only for amount to wrap, excluding fee)
       const approvalHash = await ensureAllowance(publicClient, walletClient, facilitatorAddress, SUPER_TOKEN_CONFIG.superToken.address, SUPER_TOKEN_CONFIG.underlyingToken.address, amountToWrap);
       if (approvalHash) {
@@ -177,6 +189,14 @@ app.get("/resource", async (c) => {
         });
         executedTxs.push(wrapTxHash);
         await publicClient.waitForTransactionReceipt({ hash: wrapTxHash });
+        
+        console.log("✅ [/resource] upgradeTo (wrap underlying → super token)", {
+          to: paymentAccount,
+          superToken: SUPER_TOKEN_CONFIG.superToken.address,
+          amountSuperTokenRaw: superTokenAmount.toString(),
+          amountUnderlyingUSDC: formatUnits(amountToWrap, 6),
+          txHash: wrapTxHash,
+        });
       } catch {
         const upgradeHash = await walletClient.writeContract({
           account: facilitatorAccount,
@@ -197,6 +217,15 @@ app.get("/resource", async (c) => {
         });
         executedTxs.push(wrapTxHash);
         await publicClient.waitForTransactionReceipt({ hash: wrapTxHash });
+        
+        console.log("✅ [/resource] upgrade + transfer (wrap & send super token)", {
+          to: paymentAccount,
+          superToken: SUPER_TOKEN_CONFIG.superToken.address,
+          amountSuperTokenRaw: superTokenAmount.toString(),
+          amountUnderlyingUSDC: formatUnits(amountToWrap, 6),
+          upgradeTxHash: upgradeHash,
+          transferTxHash: wrapTxHash,
+        });
       }
       
       // 4. Create stream if recipient provided
@@ -230,10 +259,28 @@ app.get("/resource", async (c) => {
             );
             executedTxs.push(streamTxHash);
             await publicClient.waitForTransactionReceipt({ hash: streamTxHash });
+            
+            console.log("🌊 [/resource] Created Superfluid stream", {
+              from: paymentAccount,
+              to: recipientAddress,
+              monthlyAmountUSDC: formatUnits(monthlyAmountUSDC, 6),
+              flowRateWeiPerSecond: streamFlowRate.toString(),
+              txHash: streamTxHash,
+            });
           } catch (streamError) {
             // Stream creation failed, but wrap succeeded - log but don't fail
-            console.warn("Stream creation failed:", streamError);
+            console.warn("⚠️ [/resource] Stream creation failed", {
+              from: paymentAccount,
+              recipient: recipientAddress,
+              error: `${streamError}`,
+            });
           }
+        } else {
+          console.log("ℹ️ [/resource] Facilitator lacks ACL permissions for stream creation", {
+            from: paymentAccount,
+            operator: facilitatorAddress,
+            recipient: recipientAddress,
+          });
         }
       }
       
@@ -250,21 +297,39 @@ app.get("/resource", async (c) => {
       c.header("X-PAYMENT-RESPONSE", Buffer.from(JSON.stringify(paymentResponse)).toString("base64"));
       
       const updatedBalances = await getWrapPreflight(publicClient, paymentAccount as Address);
-      return c.json({
+      
+      // Format amounts for display (USDC has 6 decimals)
+      const wrappedFormatted = formatUnits(amountToWrap, 6);
+      const feeFormatted = formatUnits(fee, 6);
+      
+      const responseBody = {
         status: "ok",
         account: paymentAccount,
         superTokenBalance: updatedBalances.superTokenBalance.toString(),
         message: streamTxHash 
-          ? `Access granted! Wrapped ${amountToWrap.toString()} USDC to USDCx and created stream (fee: ${fee.toString()} USDC)`
-          : `Access granted! Wrapped ${amountToWrap.toString()} USDC to USDCx (fee: ${fee.toString()} USDC)`,
+          ? `Access granted! Wrapped ${wrappedFormatted} USDC to USDCx and created stream (fee: ${feeFormatted} USDC)`
+          : `Access granted! Wrapped ${wrappedFormatted} USDC to USDCx (fee: ${feeFormatted} USDC)`,
         transactions: executedTxs,
         fee: fee.toString(),
         wrapped: amountToWrap.toString(),
         streamCreated: streamTxHash !== null,
         streamTxHash: streamTxHash,
         imageUrl: "https://i.imgur.com/k2tPAGC.jpeg",
+      };
+
+      console.log("✅ [/resource] Payment + wrap completed", {
+        account: paymentAccount,
+        wrappedUSDC: wrappedFormatted,
+        feeUSDC: feeFormatted,
+        streamCreated: responseBody.streamCreated,
+        streamTxHash: responseBody.streamTxHash,
       });
+
+      return c.json(responseBody);
     } catch (error) {
+      console.error("❌ [/resource] Payment processing failed", {
+        error: `${error}`,
+      });
       return c.json({ error: "Payment processing failed", details: `${error}` }, 500);
     }
   }
@@ -273,6 +338,12 @@ app.get("/resource", async (c) => {
   const flowRate = await getFlowRate(publicClient as any, accountChecksum, recipientAddress);
 
   if (flowRate > 0n) {
+    console.log("✅ [/resource] Existing stream found, granting access", {
+      account: accountChecksum,
+      recipient: recipientAddress,
+      flowRateWeiPerSecond: flowRate.toString(),
+    });
+
     return c.json({
       status: "ok",
       account: accountChecksum,
@@ -328,6 +399,14 @@ app.get("/resource", async (c) => {
       flowRate: streamFlowRate.toString(), // wei per second
     },
   };
+
+  console.log("ℹ️ [/resource] Returning 402 payment required", {
+    account: accountChecksum,
+    recipient: recipientAddress,
+    monthlyAmountUSDC: formatUnits(monthlyAmountUSDC, 6),
+    totalRequiredUSDC: formatUnits(totalRequired, 6),
+    feeUSDC: formatUnits(fee, 6),
+  });
 
   return c.json(
     {

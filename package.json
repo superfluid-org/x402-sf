@@ -7,10 +7,11 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "pnpm --filter @super-x402/web build",
+    "build": "pnpm --filter @super-x402/website build",
     "build:facilitator": "pnpm --filter @super-x402/facilitator build",
-    "build:web": "pnpm --filter @super-x402/web build",
-    "build:all": "pnpm build:facilitator && pnpm build:web"
+    "build:website": "pnpm --filter @super-x402/website build",
+    "build:all": "pnpm build:facilitator && pnpm build:website",
+    "dev:website": "pnpm --filter @super-x402/website dev"
   },
   "devDependencies": {
     "@types/node": "^20.14.2",

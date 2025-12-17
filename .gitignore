@@ -9,3 +9,4 @@ apps/web/dist/
 packages/superfluid/node_modules
 node_modules
 .vercel
+.DS_Store

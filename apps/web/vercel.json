@@ -1,6 +1,0 @@
-{
-  "buildCommand": "cd ../.. && pnpm build --filter @super-x402/web",
-  "outputDirectory": "dist",
-  "framework": "vite"
-}
-

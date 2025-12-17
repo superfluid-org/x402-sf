@@ -1,9 +1,9 @@
 {
   "version": 2,
   "buildCommand": "pnpm build",
-  "outputDirectory": "apps/web/dist",
   "installCommand": "pnpm install",
-  "framework": null,
+  "framework": "nextjs",
+  "rootDirectory": "apps/website",
   "functions": {
     "api/facilitator.ts": {
       "runtime": "nodejs20.x",

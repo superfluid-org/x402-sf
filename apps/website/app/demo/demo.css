@@ -1,0 +1,62 @@
+.demo-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 40px 24px 96px;
+}
+
+.demo-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.demo-header {
+  margin-bottom: 24px;
+}
+
+.demo-header h1 {
+  margin: 0 0 12px;
+  font-size: 32px;
+  color: #0f172a;
+}
+
+.demo-header p {
+  margin: 0 0 12px;
+  color: #334155;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 14px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  margin-right: 8px;
+}
+
+.demo-footer {
+  margin-top: 64px;
+  text-align: center;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.demo-footer p {
+  margin: 0 0 8px;
+}
+
+.demo-footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.demo-footer a:hover {
+  text-decoration: underline;
+}
+

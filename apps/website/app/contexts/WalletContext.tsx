@@ -1,3 +1,5 @@
+"use client";
+
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { Hex, createWalletClient, custom, type WalletClient } from "viem";
 import { base } from "viem/chains";
@@ -30,7 +32,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const ensureBaseNetwork = async () => {
-    if (!window.ethereum) {
+    if (typeof window === "undefined" || !window.ethereum) {
       throw new Error("No injected wallet available. Please install Coinbase Wallet or MetaMask.");
     }
 
@@ -67,7 +69,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     setError(null);
 
     try {
-      if (!window.ethereum) {
+      if (typeof window === "undefined" || !window.ethereum) {
         throw new Error("No injected wallet available. Please install Coinbase Wallet or MetaMask.");
       }
 
@@ -102,7 +104,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    if (!window.ethereum) {
+    if (typeof window === "undefined" || !window.ethereum) {
       return;
     }
 
@@ -178,3 +180,4 @@ export const useWallet = () => {
   }
   return context;
 };
+
