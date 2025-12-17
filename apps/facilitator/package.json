@@ -1,0 +1,26 @@
+{
+  "name": "@super-x402/facilitator",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.11.7",
+    "@super-x402/config": "workspace:*",
+    "@super-x402/superfluid": "workspace:*",
+    "dotenv": "^16.4.5",
+    "hono": "^4.4.10",
+    "uuid": "^9.0.1",
+    "viem": "^2.13.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
+}

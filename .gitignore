@@ -1,0 +1,11 @@
+env
+apps/facilitator/.env
+apps/web/.env
+apps/web/node_modules
+apps/facilitator/node_modules
+apps/facilitator/dist/
+apps/web/dist/
+*.js.map
+packages/superfluid/node_modules
+node_modules
+.vercel

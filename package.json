@@ -1,0 +1,19 @@
+{
+  "name": "super-x402",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm --filter @super-x402/web build",
+    "build:facilitator": "pnpm --filter @super-x402/facilitator build",
+    "build:web": "pnpm --filter @super-x402/web build",
+    "build:all": "pnpm build:facilitator && pnpm build:web"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.2",
+    "@types/uuid": "^9.0.8"
+  }
+}
