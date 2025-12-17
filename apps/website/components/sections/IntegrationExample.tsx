@@ -106,24 +106,6 @@ console.log(response.data.imageUrl);`}</code>
               </p>
             </div>
 
-            <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-3 text-black">💡 How It Works</h3>
-              <p className="text-gray-700 text-sm mb-3">
-                The x402-axios middleware handles everything automatically:
-              </p>
-              <ul className="text-gray-700 text-sm space-y-2 list-disc list-inside">
-                <li><strong>Automatic 402 handling:</strong> Detects 402 responses and prompts for payment signature</li>
-                <li><strong>Signature-only payments:</strong> Users sign EIP-3009 authorizations (no gas fees)</li>
-                <li><strong>Automatic retries:</strong> Retries request with X-PAYMENT header after signing</li>
-                <li><strong>Facilitator handles everything:</strong> Wraps tokens, creates streams, pays gas</li>
-                <li><strong>Stream checking:</strong> If user already has active stream, access granted immediately</li>
-              </ul>
-              <p className="text-gray-700 text-sm mt-3">
-                <strong>Note:</strong> For first-time users, ACL permissions may need to be granted (one-time on-chain transaction).
-                The facilitator will check permissions and create streams automatically if granted.
-              </p>
-            </div>
-
             <div className="bg-white border-2 border-black rounded-lg p-8 text-center mt-8">
               <h3 className="text-2xl font-semibold mb-4 text-black">Ready to get started?</h3>
               <p className="text-gray-700 mb-6">
