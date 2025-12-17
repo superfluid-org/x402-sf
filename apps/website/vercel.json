@@ -1,6 +1,5 @@
 {
-  "framework": "nextjs",
-  "installCommand": "corepack enable && pnpm install --frozen-lockfile",
-  "buildCommand": "NEXT_DISABLE_TURBOPACK=1 pnpm build"
+  "buildCommand": "cd ../.. && pnpm --filter @super-x402/website build",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile"
 }
 
