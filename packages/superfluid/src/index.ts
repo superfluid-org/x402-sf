@@ -156,13 +156,18 @@ export async function ensureAllowance(
     return null;
   }
 
+  if (!wallet.account) {
+    throw new Error("Wallet client must have an account");
+  }
+
   return wallet.writeContract({
+    account: wallet.account,
     address: token,
     abi: erc20Abi,
     functionName: "approve",
     args: [spender, maxUint256],
     chain: undefined,
-  } as Parameters<typeof wallet.writeContract>[0]);
+  });
 }
 
 export const EIP3009_TYPES = {

@@ -76,6 +76,7 @@ export default function DemoPage() {
 
   const [facilitatorAddress, setFacilitatorAddress] = useState<string | null>(null);
   const isGrantingRef = useRef(false);
+  const hasAutoTriggeredRef = useRef(false);
 
   const isOnBase = chainId === SUPER_TOKEN_CONFIG.chain.id;
 
@@ -191,8 +192,8 @@ export default function DemoPage() {
         const hexPart = cleanHash.slice(2);
         txHash = `0x${hexPart.length % 2 === 0 ? hexPart : `0${hexPart}`}` as `0x${string}`;
       } else {
-        // If it's not a string, convert it
-        txHash = `0x${hash.toString(16).padStart(64, "0")}` as `0x${string}`;
+        // If it's not a string, convert it (shouldn't happen with viem, but handle it)
+        txHash = `0x${String(hash).padStart(64, "0")}` as `0x${string}`;
       }
       
       console.log("Formatted transaction hash:", txHash);
@@ -253,7 +254,7 @@ export default function DemoPage() {
       }));
 
       if (hasPermissions) {
-        console.log("✅ ACL permissions successfully granted! UI should now show 'Access Content' button.");
+        console.log("✅ ACL permissions successfully granted!");
       }
     } catch (error: any) {
       console.error("Failed to grant permissions:", error);
@@ -268,21 +269,23 @@ export default function DemoPage() {
 
   const accessContent = async () => {
     if (!address || !walletClient) {
-      setDemoState({
+      setDemoState(prev => ({
+        ...prev,
         status: "error",
         imageUrl: null,
         message: null,
         error: "Please connect your wallet first.",
-      });
+      }));
       return;
     }
 
-    setDemoState({
+    setDemoState(prev => ({
+      ...prev,
       status: "loading",
       imageUrl: null,
       message: null,
       error: null,
-    });
+    }));
 
     try {
       // Create x402-enabled client - middleware handles everything automatically
@@ -304,30 +307,58 @@ export default function DemoPage() {
       });
 
       if (response.data?.imageUrl) {
-        setDemoState({
+        setDemoState(prev => ({
+          ...prev,
           status: "success",
           imageUrl: response.data.imageUrl,
           message: response.data.message || "Access granted!",
           error: null,
-        });
+        }));
       } else {
-        setDemoState({
+        setDemoState(prev => ({
+          ...prev,
           status: "success",
           imageUrl: null,
           message: response.data?.message || "Access granted!",
           error: null,
-        });
+        }));
       }
     } catch (error: any) {
       console.error("Request failed", error);
-      setDemoState({
+      setDemoState(prev => ({
+        ...prev,
         status: "error",
         imageUrl: null,
         message: null,
         error: error?.response?.data?.error || error?.message || "Failed to access content",
-      });
+      }));
     }
   };
+
+  // Auto-access content when ACL permissions are granted
+  useEffect(() => {
+    if (
+      demoState.aclStatus === "granted" &&
+      demoState.status === "idle" &&
+      walletClient &&
+      address &&
+      !isGrantingRef.current &&
+      !hasAutoTriggeredRef.current
+    ) {
+      // Mark as triggered to prevent multiple calls
+      hasAutoTriggeredRef.current = true;
+      // Small delay to ensure UI has updated
+      const timer = setTimeout(() => {
+        accessContent();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    
+    // Reset the ref when status changes away from idle
+    if (demoState.status !== "idle") {
+      hasAutoTriggeredRef.current = false;
+    }
+  }, [demoState.aclStatus, demoState.status, walletClient, address]);
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -341,8 +372,6 @@ export default function DemoPage() {
                 Experience seamless streaming payments. The x402-axios middleware handles everything automatically—
                 payment signing, retries, and stream creation.
               </p>
-              <div className="status-pill">Network: {SUPER_TOKEN_CONFIG.chain.name}</div>
-              <div className="status-pill">✨ x402 Spec-Compliant</div>
             </header>
 
             <section className="demo-card">
@@ -420,19 +449,19 @@ export default function DemoPage() {
                           <button
                             type="button"
                             onClick={grantAclPermissions}
-                            disabled={demoState.aclStatus === "granting" || !walletClient}
+                            disabled={!walletClient}
                             style={{
                               padding: "12px 24px",
                               fontSize: "1rem",
                               fontWeight: 600,
-                              backgroundColor: (demoState.aclStatus === "granting" || !walletClient) ? "#9ca3af" : "#3b82f6",
+                              backgroundColor: !walletClient ? "#9ca3af" : "#3b82f6",
                               color: "white",
                               border: "none",
                               borderRadius: 8,
-                              cursor: (demoState.aclStatus === "granting" || !walletClient) ? "not-allowed" : "pointer",
+                              cursor: !walletClient ? "not-allowed" : "pointer",
                             }}
                           >
-                            {demoState.aclStatus === "granting" ? "Granting Permissions..." : "Grant Permissions"}
+                            Grant Permissions
                           </button>
                         </div>
                       )}
@@ -509,7 +538,6 @@ export default function DemoPage() {
 
                   {demoState.status === "success" && demoState.imageUrl && (
                     <div>
-                      <h2 style={{ marginBottom: 16 }}>🎉 Access Granted!</h2>
                       {demoState.message && (
                         <p style={{ color: "#059669", fontWeight: 600, marginBottom: 20 }}>
                           ✅ {demoState.message}
@@ -525,27 +553,8 @@ export default function DemoPage() {
                             boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" 
                           }} 
                         />
-                        <p style={{ marginTop: 12, fontSize: "0.875rem", color: "#6b7280", textAlign: "center" }}>
-                          ✅ Access granted via x402 + Superfluid streaming
-                        </p>
                       </div>
                       <div style={{ marginTop: 24, textAlign: "center" }}>
-                        <button
-                          type="button"
-                          onClick={() => setDemoState({ status: "idle", imageUrl: null, message: null, error: null })}
-                          style={{
-                            padding: "10px 20px",
-                            fontSize: "0.9375rem",
-                            backgroundColor: "#6b7280",
-                            color: "white",
-                            border: "none",
-                            borderRadius: 8,
-                            cursor: "pointer",
-                            fontWeight: 600,
-                          }}
-                        >
-                          Try Again
-                        </button>
                       </div>
                     </div>
                   )}
@@ -560,7 +569,7 @@ export default function DemoPage() {
                       )}
                       <button
                         type="button"
-                        onClick={() => setDemoState({ status: "idle", imageUrl: null, message: null, error: null })}
+                        onClick={() => setDemoState(prev => ({ ...prev, status: "idle", imageUrl: null, message: null, error: null }))}
                         style={{
                           padding: "10px 20px",
                           fontSize: "0.9375rem",
@@ -592,7 +601,7 @@ export default function DemoPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setDemoState({ status: "idle", imageUrl: null, message: null, error: null })}
+                        onClick={() => setDemoState(prev => ({ ...prev, status: "idle", imageUrl: null, message: null, error: null }))}
                         style={{
                           padding: "10px 20px",
                           fontSize: "0.9375rem",
