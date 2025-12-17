@@ -119,13 +119,15 @@ export async function getWrapPreflight(
       abi: erc20Abi,
       functionName: "balanceOf",
       args: [account],
-    }),
+      authorizationList: undefined,
+    } as any) as Promise<bigint>,
     client.readContract({
       address: SUPER_TOKEN_CONFIG.superToken.address,
       abi: superTokenAbi,
       functionName: "balanceOf",
       args: [account],
-    }),
+      authorizationList: undefined,
+    } as any) as Promise<bigint>,
   ]);
 
   return {
@@ -142,12 +144,13 @@ export async function ensureAllowance(
   token: Address,
   amount: bigint,
 ) {
-  const allowance = await client.readContract({
+  const allowance = await (client.readContract({
     address: token,
     abi: erc20Abi,
     functionName: "allowance",
     args: [owner, spender],
-  });
+    authorizationList: undefined,
+  } as Parameters<typeof client.readContract>[0]) as Promise<bigint>);
 
   if (allowance >= amount) {
     return null;
@@ -158,7 +161,8 @@ export async function ensureAllowance(
     abi: erc20Abi,
     functionName: "approve",
     args: [spender, maxUint256],
-  });
+    chain: undefined,
+  } as Parameters<typeof wallet.writeContract>[0]);
 }
 
 export const EIP3009_TYPES = {
@@ -239,7 +243,7 @@ export async function checkFlowPermissions(
   facilitatorAddress: Address,
 ): Promise<{ hasPermissions: boolean; permissions: number; allowance: bigint }> {
   // Call CFA contract's getFlowOperatorData
-  const result = (await publicClient.readContract({
+  const result = await publicClient.readContract({
     address: SUPER_TOKEN_CONFIG.superfluid.cfa,
     abi: CFA_ABI,
     functionName: "getFlowOperatorData",
@@ -248,7 +252,8 @@ export async function checkFlowPermissions(
       userAddress,
       facilitatorAddress,
     ],
-  })) as [string, number, bigint];
+    authorizationList: undefined,
+  } as any) as [string, number, bigint];
 
   const [flowOperatorId, permissions, flowrateAllowance] = result;
   
@@ -278,7 +283,7 @@ export async function getFlowRate(
 ): Promise<bigint> {
   try {
     // Use CFA Forwarder's getFlowrate function
-    const result = (await publicClient.readContract({
+    const result = await publicClient.readContract({
       address: SUPER_TOKEN_CONFIG.superfluid.cfaV1Forwarder,
       abi: cfaForwarderAbi as any,
       functionName: "getFlowrate",
@@ -287,7 +292,8 @@ export async function getFlowRate(
         sender, // from
         receiver, // to
       ],
-    })) as bigint;
+      authorizationList: undefined,
+    } as any) as bigint;
 
     return result > 0n ? result : 0n;
   } catch (error) {
