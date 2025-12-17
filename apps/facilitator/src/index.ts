@@ -152,6 +152,7 @@ app.get("/resource", async (c) => {
       // 1. Transfer USDC (full amount including fee)
       const transferTxHash = await walletClient.writeContract({
         account: facilitatorAccount,
+        chain: undefined,
         address: SUPER_TOKEN_CONFIG.underlyingToken.address,
         abi: EIP3009_ABI,
         functionName: "transferWithAuthorization",
@@ -182,6 +183,7 @@ app.get("/resource", async (c) => {
       try {
         wrapTxHash = await walletClient.writeContract({
           account: facilitatorAccount,
+          chain: undefined,
           address: SUPER_TOKEN_CONFIG.superToken.address,
           abi: SUPER_TOKEN_ABI,
           functionName: "upgradeTo",
@@ -200,6 +202,7 @@ app.get("/resource", async (c) => {
       } catch {
         const upgradeHash = await walletClient.writeContract({
           account: facilitatorAccount,
+          chain: undefined,
           address: SUPER_TOKEN_CONFIG.superToken.address,
           abi: SUPER_TOKEN_ABI,
           functionName: "upgrade",
@@ -210,6 +213,7 @@ app.get("/resource", async (c) => {
         
         wrapTxHash = await walletClient.writeContract({
           account: facilitatorAccount,
+          chain: undefined,
           address: SUPER_TOKEN_CONFIG.superToken.address,
           abi: SUPER_TOKEN_ABI,
           functionName: "transfer",
@@ -553,6 +557,7 @@ app.post("/settle", async (c) => {
     try {
       const transferTxHash = await walletClient.writeContract({
         account: facilitatorAccount,
+        chain: undefined,
         address: SUPER_TOKEN_CONFIG.underlyingToken.address,
         abi: EIP3009_ABI,
         functionName: "transferWithAuthorization",
@@ -589,6 +594,7 @@ app.post("/settle", async (c) => {
 
       const wrapTxHash = await walletClient.writeContract({
         account: facilitatorAccount,
+        chain: undefined,
         address: SUPER_TOKEN_CONFIG.superToken.address,
         abi: SUPER_TOKEN_ABI,
         functionName: "upgradeTo",
