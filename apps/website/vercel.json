@@ -1,5 +1,0 @@
-{
-  "buildCommand": "NEXT_DISABLE_TURBOPACK=1 pnpm --filter @super-x402/website build",
-  "installCommand": "pnpm install --frozen-lockfile"
-}
-
