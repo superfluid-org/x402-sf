@@ -6,11 +6,11 @@ export default function Features() {
     },
     {
       title: "Zero gas for users",
-      description: "Users only sign EIP-3009 authorizations (signature-only). Facilitator handles wrapping and stream creation",
+      description: "Users only sign EIP-712 based signatures for authorization. Facilitator handles wrapping and stream creation",
     },
     {
       title: "Zero wait",
-      description: "Money streams at the speed of the internet with real-time continuous payments",
+      description: "Money streams at the speed of the internet with real-time continuous payments that you can cancel anytime",
     },
     {
       title: "Zero friction",
