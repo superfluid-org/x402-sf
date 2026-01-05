@@ -21,6 +21,33 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   title: "x402-superfluid | Internet-Native Subscriptions",
   description: "x402-superfluid extends the x402 standard with continuous payment streams. An end-to-end internet-native subscription infrastructure for the agentic economy.",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
+  openGraph: {
+    title: "x402-superfluid | Internet-Native Subscriptions",
+    description: "x402-superfluid extends the x402 standard with continuous payment streams. An end-to-end internet-native subscription infrastructure for the agentic economy.",
+    url: "https://x402-superfluid.vercel.app",
+    siteName: "x402-superfluid",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "x402 × Superfluid - Subscription Required",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "x402-superfluid | Internet-Native Subscriptions",
+    description: "x402-superfluid extends the x402 standard with continuous payment streams. An end-to-end internet-native subscription infrastructure for the agentic economy.",
+    images: ["/og-image.png"],
+  },
 };
 
 export default async function RootLayout({
