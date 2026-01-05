@@ -375,7 +375,7 @@ export default function DemoPage() {
               <div style={{ 
                 padding: "1rem", 
                 backgroundColor: "#fef3c7", 
-                border: "2px solidrgb(239, 192, 110)", 
+                  border: "2px solid rgb(239, 192, 110)",
                 borderRadius: "8px",
                 marginBottom: "1rem",
                 fontSize: "0.9rem"
