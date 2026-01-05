@@ -368,8 +368,23 @@ export default function DemoPage() {
               <h1 className="font-serif">x402 + Superfluid Demo</h1>
               <p style={{ marginBottom: "1rem" }}>
                 Experience seamless streaming payments. The x402-axios middleware handles everything automatically—
-                payment signing, retries, and stream creation.
+                payment signing, token wrapping, and superfluid stream creation.
               </p>
+              
+              {/* Warning Banner */}
+              <div style={{ 
+                padding: "1rem", 
+                backgroundColor: "#fef3c7", 
+                border: "2px solidrgb(239, 192, 110)", 
+                borderRadius: "8px",
+                marginBottom: "1rem",
+                fontSize: "0.9rem"
+              }}>
+                <p style={{ margin: 0, color: "#92400e", fontWeight: 600 }}>
+                  <strong>Prototype Warning:</strong> This is still a prototype. Its architecture will change and it may break anytime.
+                </p>
+              </div>
+
               <div style={{ 
                 padding: "1rem", 
                 backgroundColor: "#f9fafb", 
