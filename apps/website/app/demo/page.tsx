@@ -252,7 +252,7 @@ export default function DemoPage() {
       }));
 
       if (hasPermissions) {
-        console.log("✅ ACL permissions successfully granted!");
+        console.log("ACL permissions successfully granted!");
       }
     } catch (error: any) {
       console.error("Failed to grant permissions:", error);
@@ -406,9 +406,8 @@ export default function DemoPage() {
             <section className="demo-card">
               {!isConnected ? (
                 <div style={{ textAlign: "center" }}>
-                  <h2 style={{ marginBottom: 16 }}>Connect Your Wallet</h2>
                   <p style={{ color: "#6b7280", marginBottom: 20 }}>
-                    Connect your {SUPER_TOKEN_CONFIG.chain.name} wallet to access gated content
+                    Connect your {SUPER_TOKEN_CONFIG.chain.name} wallet to try out the demo
                   </p>
                   <div style={{ display: "flex", justifyContent: "center" }}>
                     <appkit-button />
