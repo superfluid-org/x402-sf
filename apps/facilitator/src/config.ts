@@ -25,3 +25,4 @@ export const SUPER_TOKEN_CONFIG = {
 } as const;
 
 export type SuperTokenConfig = typeof SUPER_TOKEN_CONFIG;
+

@@ -11,8 +11,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.11.7",
-    "@super-x402/config": "workspace:*",
-    "@super-x402/superfluid": "workspace:*",
+    "@sfpro/sdk": "^0.1.2",
     "dotenv": "^16.4.5",
     "hono": "^4.4.10",
     "uuid": "^9.0.1",

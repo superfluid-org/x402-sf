@@ -2,12 +2,9 @@ import { randomBytes } from "crypto";
 import {
   createPublicClient,
   createWalletClient,
-  encodeFunctionData,
   erc20Abi,
   http,
-  keccak256,
   maxUint256,
-  toHex,
   type Address,
   type Hex,
   type PublicClient,
@@ -15,8 +12,8 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
-import { SUPER_TOKEN_CONFIG } from "@super-x402/config";
 import { cfaForwarderAbi } from "@sfpro/sdk/abi";
+import { SUPER_TOKEN_CONFIG } from "./config.js";
 
 const superTokenAbi = [
   {
@@ -370,7 +367,6 @@ export async function grantPermissionsAndCreateFlow(
 
   const { hasPermissions } = await checkFlowPermissions(publicClient, userAddress, facilitatorAddress);
 
-
   if (!hasPermissions) {
     throw new Error("User has not granted flow permissions to facilitator. Please grant permissions via CFA Forwarder first.");
   }
@@ -380,3 +376,4 @@ export async function grantPermissionsAndCreateFlow(
     needsPermissions: false 
   };
 }
+

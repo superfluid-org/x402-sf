@@ -18,8 +18,8 @@ import {
   getEIP3009Domain,
   getFlowRate,
   getWrapPreflight,
-} from "@super-x402/superfluid";
-import { SUPER_TOKEN_CONFIG } from "@super-x402/config";
+} from "./superfluid.js";
+import { SUPER_TOKEN_CONFIG } from "./config.js";
 
 loadEnv();
 
