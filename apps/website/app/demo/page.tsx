@@ -365,7 +365,7 @@ export default function DemoPage() {
         <div className="demo-container">
           <div className="demo-card">
             <header className="demo-header">
-              <h1>x402 + Superfluid Demo</h1>
+              <h1 className="font-serif">x402 + Superfluid Demo</h1>
               <p style={{ marginBottom: "1rem" }}>
                 Experience seamless streaming payments. The x402-axios middleware handles everything automatically—
                 payment signing, retries, and stream creation.

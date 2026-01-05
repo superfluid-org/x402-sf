@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import X402Logo from './X402Logo';
+import SuperfluidLogo from './SuperfluidLogo';
 
 export default function Footer() {
   return (
@@ -6,7 +8,11 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="col-span-1 md:col-span-2">
-            <h3 className="text-lg font-semibold mb-4">x402-superfluid</h3>
+            <div className="flex items-center gap-2 mb-4">
+              <X402Logo className="h-5 w-auto text-black" />
+              <span className="text-lg font-semibold text-gray-800">×</span>
+              <SuperfluidLogo className="h-6 w-auto text-black" />
+            </div>
             <p className="text-gray-600 text-sm">
               An end-to-end internet-native subscription infrastructure. x402-superfluid extends 
               the x402 standard with continuous payment streams, enabling lasting trust in the agentic economy.
