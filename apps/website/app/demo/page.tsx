@@ -7,7 +7,7 @@ import { useAccount, useWalletClient, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
-import { SUPER_TOKEN_CONFIG } from "@super-x402/config";
+import { SUPER_TOKEN_CONFIG } from "../config/supertoken";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import "./demo.css";
