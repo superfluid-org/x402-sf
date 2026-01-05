@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { withPaymentInterceptor } from "x402-axios";
 import { useAccount, useWalletClient, useChainId } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { SUPER_TOKEN_CONFIG } from "../config/supertoken";
@@ -382,7 +381,7 @@ export default function DemoPage() {
                     Connect your {SUPER_TOKEN_CONFIG.chain.name} wallet to access gated content
                   </p>
                   <div style={{ display: "flex", justifyContent: "center" }}>
-                    <ConnectButton />
+                    <appkit-button />
                   </div>
                 </div>
               ) : !isOnBase ? (
@@ -392,7 +391,7 @@ export default function DemoPage() {
                     Please switch to {SUPER_TOKEN_CONFIG.chain.name} to continue
                   </p>
                   <div style={{ display: "flex", justifyContent: "center" }}>
-                    <ConnectButton />
+                    <appkit-button />
                   </div>
                 </div>
               ) : (

@@ -1,28 +1,12 @@
 "use client";
 
-import * as React from "react";
+import React, { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider } from "wagmi";
-import { base } from "wagmi/chains";
-import { getDefaultConfig, RainbowKitProvider } from "@rainbow-me/rainbowkit";
-import "@rainbow-me/rainbowkit/styles.css";
+import { WagmiProvider, cookieToInitialState, type Config } from "wagmi";
+import { createAppKit } from "@reown/appkit/react";
+import { config, networks, projectId, wagmiAdapter } from "@/config";
+import { base } from "@reown/appkit/networks";
 
-// Create config outside component to prevent re-initialization
-let wagmiConfig: ReturnType<typeof getDefaultConfig> | undefined;
-
-function getWagmiConfig() {
-  if (!wagmiConfig) {
-    wagmiConfig = getDefaultConfig({
-      appName: "x402 + Superfluid",
-      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "YOUR_PROJECT_ID",
-      chains: [base],
-      ssr: true,
-    });
-  }
-  return wagmiConfig;
-}
-
-// Create QueryClient outside component to prevent re-initialization
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -31,16 +15,44 @@ const queryClient = new QueryClient({
   },
 });
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  const config = React.useMemo(() => getWagmiConfig(), []);
-  
+const metadata = {
+  name: "x402 + Superfluid",
+  description: "Pay-as-you-go content with Superfluid streams",
+  url: typeof window !== "undefined" ? window.location.origin : "https://x402.dev",
+  icons: ["https://avatars.githubusercontent.com/u/37784886"],
+};
+
+// Initialize AppKit outside the component render cycle
+if (!projectId) {
+  console.error("AppKit Initialization Error: Project ID is missing. Get one at https://cloud.reown.com");
+} else {
+  createAppKit({
+    adapters: [wagmiAdapter],
+    projectId: projectId!,
+    networks: networks,
+    defaultNetwork: base,
+    metadata,
+    features: { 
+      analytics: true,
+      email: false,
+      socials: [],
+    },
+  });
+}
+
+export function Providers({
+  children,
+  cookies,
+}: {
+  children: ReactNode;
+  cookies: string | null;
+}) {
+  // Calculate initial state for Wagmi SSR hydration
+  const initialState = cookieToInitialState(config as Config, cookies);
+
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>
-          {children}
-        </RainbowKitProvider>
-      </QueryClientProvider>
+    <WagmiProvider config={config as Config} initialState={initialState}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </WagmiProvider>
   );
 }

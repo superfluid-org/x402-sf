@@ -1,3 +1,5 @@
+import "react";
+
 interface EthereumProvider {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
   on(event: "accountsChanged", listener: (accounts: string[]) => void): void;
@@ -11,6 +13,15 @@ interface EthereumProvider {
 declare global {
   interface Window {
     ethereum?: EthereumProvider;
+  }
+
+  namespace JSX {
+    interface IntrinsicElements {
+      /**
+       * The AppKit button web component. Registered globally by AppKit.
+       */
+      "appkit-button": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+    }
   }
 }
 
