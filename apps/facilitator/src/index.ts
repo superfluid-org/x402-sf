@@ -23,14 +23,25 @@ import { SUPER_TOKEN_CONFIG } from "./config.js";
 
 loadEnv();
 
-const port = Number(process.env.PORT || 4020);
-const rpcUrl = process.env.BASE_RPC_URL || SUPER_TOKEN_CONFIG.chain.rpcUrl;
-
-const privateKeyEnv = process.env.FACILITATOR_PRIVATE_KEY ?? process.env.EVM_PRIVATE_KEY;
+// Required environment variables
+const privateKeyEnv = process.env.FACILITATOR_PRIVATE_KEY;
 if (!privateKeyEnv) {
-  console.error("❌ Missing FACILITATOR_PRIVATE_KEY (or EVM_PRIVATE_KEY) environment variable.");
+  console.error("❌ Missing required environment variable: FACILITATOR_PRIVATE_KEY");
   process.exit(1);
 }
+
+const rpcUrl = process.env.BASE_RPC_URL;
+if (!rpcUrl) {
+  console.error("❌ Missing required environment variable: BASE_RPC_URL");
+  process.exit(1);
+}
+
+// Optional environment variables with defaults
+const port = Number(process.env.PORT || 4020);
+const allowedOrigins = process.env.ALLOWED_ORIGIN 
+  ? process.env.ALLOWED_ORIGIN.split(",") 
+  : ["http://localhost:3000", "http://localhost:5173"];
+
 const facilitatorPrivateKey = (privateKeyEnv.startsWith("0x") ? privateKeyEnv : `0x${privateKeyEnv}`) as Hex;
 
 const publicClient = createBasePublicClient(rpcUrl);
@@ -56,7 +67,7 @@ const app = new Hono();
 app.use(
   "*",
   cors({
-    origin: process.env.ALLOWED_ORIGIN?.split(",") ?? ["http://localhost:5173", "http://localhost:3000"],
+    origin: allowedOrigins,
     allowHeaders: ["Content-Type", "X-Payment", "Access-Control-Expose-Headers"],
     exposeHeaders: ["X-Payment-Response"], // x402 requires this header to be exposed
     allowMethods: ["GET", "POST", "OPTIONS"],

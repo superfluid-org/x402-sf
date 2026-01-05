@@ -11,7 +11,10 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import "./demo.css";
 
-const FACILITATOR_URL = process.env.NEXT_PUBLIC_FACILITATOR_URL || "http://localhost:4020";
+const FACILITATOR_URL = process.env.NEXT_PUBLIC_FACILITATOR_URL;
+if (!FACILITATOR_URL) {
+  throw new Error("Missing required environment variable: NEXT_PUBLIC_FACILITATOR_URL");
+}
 const RECIPIENT_ADDRESS = "0x4e1dfc95c49186c8D6fAf7a33064Cc74F6Af235D";
 const CFA_FORWARDER_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.cfaV1Forwarder;
 const CFA_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.cfa;
@@ -182,16 +185,12 @@ export default function DemoPage() {
 
       console.log("Transaction sent, hash:", hash);
 
-      // Ensure hash is properly formatted - viem should return a string, but ensure it's valid
       let txHash: `0x${string}`;
       if (typeof hash === "string") {
-        // Remove any whitespace and ensure it starts with 0x
         const cleanHash = hash.trim().startsWith("0x") ? hash.trim() : `0x${hash.trim()}`;
-        // Ensure even length (pad with 0 if needed)
         const hexPart = cleanHash.slice(2);
         txHash = `0x${hexPart.length % 2 === 0 ? hexPart : `0${hexPart}`}` as `0x${string}`;
       } else {
-        // If it's not a string, convert it (shouldn't happen with viem, but handle it)
         txHash = `0x${String(hash).padStart(64, "0")}` as `0x${string}`;
       }
       
@@ -367,10 +366,41 @@ export default function DemoPage() {
           <div className="demo-card">
             <header className="demo-header">
               <h1>x402 + Superfluid Demo</h1>
-              <p>
+              <p style={{ marginBottom: "1rem" }}>
                 Experience seamless streaming payments. The x402-axios middleware handles everything automatically—
                 payment signing, retries, and stream creation.
               </p>
+              <div style={{ 
+                padding: "1rem", 
+                backgroundColor: "#f9fafb", 
+                borderLeft: "4px solid black", 
+                borderRadius: "4px",
+                fontSize: "0.9rem"
+              }}>
+                <p style={{ marginBottom: "0.75rem" }}>
+                  <strong>How this demo works:</strong>
+                </p>
+                <ol style={{ marginLeft: "1.25rem", lineHeight: "1.6" }}>
+                  <li style={{ marginBottom: "0.5rem" }}>
+                    <strong>Grant ACL Permissions (one-time):</strong> Allow the facilitator to create streams on your behalf.{" "}
+                    <a 
+                      href="https://docs.superfluid.org/docs/sdk/money-streaming/acl-user-data" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{ color: "black", textDecoration: "underline" }}
+                    >
+                      Learn more about ACL permissions
+                    </a>
+                    {" "}<span style={{ fontSize: "0.85rem", color: "#6b7280" }}>(note: this step won't be necessary in the future)</span>
+                  </li>
+                  <li style={{ marginBottom: "0.5rem" }}>
+                    <strong>Payment & Wrapping:</strong> Your USDC is automatically wrapped to USDCx and a stream is started to the receiver address
+                  </li>
+                  <li>
+                    <strong>Continuous Access:</strong> You'll have access to the pay-gated content as long as your stream remains active
+                  </li>
+                </ol>
+              </div>
             </header>
 
             <section className="demo-card">
@@ -453,7 +483,7 @@ export default function DemoPage() {
                               padding: "12px 24px",
                               fontSize: "1rem",
                               fontWeight: 600,
-                              backgroundColor: !walletClient ? "#9ca3af" : "#3b82f6",
+                              backgroundColor: !walletClient ? "#9ca3af" : "black",
                               color: "white",
                               border: "none",
                               borderRadius: 8,
@@ -500,7 +530,7 @@ export default function DemoPage() {
                               padding: "12px 24px",
                               fontSize: "1rem",
                               fontWeight: 600,
-                              backgroundColor: !walletClient ? "#9ca3af" : "#3b82f6",
+                              backgroundColor: !walletClient ? "#9ca3af" : "black",
                               color: "white",
                               border: "none",
                               borderRadius: 8,
@@ -536,25 +566,71 @@ export default function DemoPage() {
                   )}
 
                   {demoState.status === "success" && demoState.imageUrl && (
-                    <div>
-                      {demoState.message && (
-                        <p style={{ color: "#059669", fontWeight: 600, marginBottom: 20 }}>
-                          ✅ {demoState.message}
-                        </p>
-                      )}
-                      <div style={{ marginTop: 20 }}>
-                        <img 
-                          src={demoState.imageUrl} 
-                          alt="Protected content" 
-                          style={{ 
-                            maxWidth: "100%", 
-                            borderRadius: 12, 
-                            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" 
-                          }} 
-                        />
+                    <div style={{ 
+                      padding: 24, 
+                      backgroundColor: "#f9fafb", 
+                      borderRadius: 12,
+                      border: "1px solid #e5e7eb"
+                    }}>
+                      <h2 style={{ marginBottom: 16, fontSize: "1.5rem", fontWeight: 600 }}>
+                        Stream Active – Access Granted
+                      </h2>
+                      
+                      <p style={{ color: "#374151", marginBottom: 16, lineHeight: "1.6" }}>
+                        You are now streaming <strong>USDCx</strong> and have access to this pay-gated page. 
+                        Your stream is active and you can monitor it in real-time on the Superfluid Dashboard.
+                      </p>
+
+                      <a 
+                        href="https://app.superfluid.org/token/base/0xd04383398dd2426297da660f9cca3d439af9ce1b"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "inline-block",
+                          padding: "10px 20px",
+                          backgroundColor: "black",
+                          color: "white",
+                          textDecoration: "none",
+                          borderRadius: 8,
+                          fontWeight: 600,
+                          fontSize: "0.9375rem",
+                          marginBottom: 24
+                        }}
+                      >
+                        View Stream on Superfluid Dashboard →
+                      </a>
+
+                      <div style={{ 
+                        marginTop: 24, 
+                        padding: 20, 
+                        backgroundColor: "white", 
+                        borderRadius: 8,
+                        border: "1px solid #e5e7eb"
+                      }}>
+                        <h3 style={{ marginBottom: 12, fontSize: "1.125rem", fontWeight: 600 }}>
+                          Real-World Use Cases
+                        </h3>
+                        <ul style={{ 
+                          margin: 0, 
+                          paddingLeft: "1.5rem", 
+                          color: "#4b5563",
+                          lineHeight: "1.8"
+                        }}>
+                          <li><strong>Pay-gated channels:</strong> Access exclusive content, communities, or chat channels</li>
+                          <li><strong>SaaS subscriptions:</strong> Stream payments for software services instead of monthly billing</li>
+                          <li><strong>DCA (Dollar Cost Averaging):</strong> Continuous investment streams into tokens or assets</li>
+                          <li><strong>On-demand media:</strong> Stream payments while consuming content (music, video, articles)</li>
+                        </ul>
                       </div>
-                      <div style={{ marginTop: 24, textAlign: "center" }}>
-                      </div>
+
+                      <p style={{ 
+                        marginTop: 20, 
+                        color: "#6b7280", 
+                        fontSize: "0.875rem",
+                        fontStyle: "italic"
+                      }}>
+                        Your access continues as long as your stream remains active. Stop or cancel the stream anytime from the dashboard.
+                      </p>
                     </div>
                   )}
 
@@ -572,7 +648,7 @@ export default function DemoPage() {
                         style={{
                           padding: "10px 20px",
                           fontSize: "0.9375rem",
-                          backgroundColor: "#6b7280",
+                          backgroundColor: "black",
                           color: "white",
                           border: "none",
                           borderRadius: 8,
@@ -604,7 +680,7 @@ export default function DemoPage() {
                         style={{
                           padding: "10px 20px",
                           fontSize: "0.9375rem",
-                          backgroundColor: "#3b82f6",
+                          backgroundColor: "black",
                           color: "white",
                           border: "none",
                           borderRadius: 8,
@@ -619,20 +695,6 @@ export default function DemoPage() {
                 </div>
               )}
             </section>
-
-            <footer className="demo-footer">
-              <p>
-                <strong>How it works:</strong> The x402-axios middleware automatically handles 402 responses,
-                payment signing, and request retries. You just make a request and the middleware does the rest.
-              </p>
-              <p style={{ fontSize: "0.875rem", marginTop: 8 }}>
-                <strong>100% x402-compliant</strong> using official{" "}
-                <a href="https://www.npmjs.com/package/x402-axios" target="_blank" rel="noopener noreferrer">
-                  x402-axios
-                </a>{" "}
-                package. Facilitator uses <strong>"exact"</strong> scheme (EIP-3009) + auto-wraps USDC → USDCx
-              </p>
-            </footer>
           </div>
         </div>
       </main>

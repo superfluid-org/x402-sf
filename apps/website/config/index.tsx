@@ -8,7 +8,7 @@ export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
 
 // Ensure Project ID is defined at build time
 if (!projectId) {
-  console.warn('NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is not defined. Get one at https://cloud.reown.com')
+  throw new Error('Missing required environment variable: NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID. Get one at https://cloud.reown.com')
 }
 
 // Define supported networks - using Base for our Superfluid integration
