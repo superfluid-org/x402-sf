@@ -7,28 +7,29 @@ export default function Header() {
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
             <Link href="/" className="text-xl font-semibold text-black hover:opacity-80 transition-opacity">
-              x402
+              x402-superfluid
             </Link>
           </div>
           <div className="hidden md:flex space-x-8 items-center">
             <Link href="/demo" className="text-black hover:opacity-70 transition-opacity text-sm font-medium">
               Demo
             </Link>
-            <Link href="#ecosystem" className="text-black hover:opacity-70 transition-opacity text-sm">
-              Ecosystem
-            </Link>
-            <Link href="#writing" className="text-black hover:opacity-70 transition-opacity text-sm">
-              Writing
-            </Link>
-            <Link href="#whitepaper" className="text-black hover:opacity-70 transition-opacity text-sm">
-              Whitepaper
-            </Link>
-            <Link href="#docs" className="text-black hover:opacity-70 transition-opacity text-sm">
-              Docs
-            </Link>
-            <Link href="#contact" className="text-black hover:opacity-70 transition-opacity text-sm">
-              Contact
-            </Link>
+            <a 
+              href="https://docs.superfluid.org/docs/concepts/superfluid" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-black hover:opacity-70 transition-opacity text-sm"
+            >
+              Superfluid Docs
+            </a>
+            <a 
+              href="https://github.com/superfluid-org/x402-sf" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-black hover:opacity-70 transition-opacity text-sm"
+            >
+              GitHub
+            </a>
           </div>
         </div>
       </nav>

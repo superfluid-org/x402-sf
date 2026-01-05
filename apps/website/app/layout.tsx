@@ -11,8 +11,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "x402 + Superfluid | Streaming Payments for Internet-Native APIs",
-  description: "x402 extension integrated with Superfluid for real-time streaming payments. Enable continuous, instant payments for your APIs with zero protocol fees.",
+  title: "x402-superfluid | Internet-Native Subscriptions",
+  description: "x402-superfluid extends the x402 standard with continuous payment streams. An end-to-end internet-native subscription infrastructure for the agentic economy.",
 };
 
 export default async function RootLayout({

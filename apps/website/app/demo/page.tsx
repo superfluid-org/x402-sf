@@ -528,7 +528,7 @@ export default function DemoPage() {
                         color: "#374151"
                       }}>
                         <p style={{ margin: 0 }}>
-                          💡 If this is your first time, you'll be prompted to sign a payment authorization.
+                          If this is your first time, you'll be prompted to sign a payment authorization.
                           The facilitator will handle wrapping USDC to USDCx and creating the stream.
                         </p>
                       </div>
