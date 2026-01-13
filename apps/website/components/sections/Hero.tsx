@@ -19,10 +19,18 @@ export default function Hero() {
         </div>
         
         {/* Description */}
-        <p className="text-lg lg:text-xl text-gray-800 max-w-2xl mb-12 leading-relaxed">
+        <p className="text-lg lg:text-xl text-gray-800 max-w-2xl mb-8 leading-relaxed">
           <strong className="text-black">x402-superfluid</strong> is an open, neutral standard for internet-native subscriptions. It 
           extends <strong className="text-black">x402</strong> with continuous payment streams, enabling lasting trust in the agentic economy.
         </p>
+        
+        {/* Demo Button */}
+        <Link 
+          href="/demo"
+          className="inline-block px-8 py-3 border-2 border-black bg-black text-white font-semibold hover:bg-white hover:text-black transition-colors duration-200"
+        >
+          Try Demo →
+        </Link>
       </div>
 
       {/* Code Section */}

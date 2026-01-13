@@ -4,6 +4,7 @@ import Hero from '@/components/sections/Hero';
 import WhatIsX402 from '@/components/sections/WhatIsX402';
 import Features from '@/components/sections/Features';
 import HowItWorks from '@/components/sections/HowItWorks';
+import CTA from '@/components/sections/CTA';
 
 export default function Home() {
   return (
@@ -14,6 +15,7 @@ export default function Home() {
         <WhatIsX402 />
         <Features />
         <HowItWorks />
+        <CTA />
       </main>
       <Footer />
     </div>
