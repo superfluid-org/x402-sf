@@ -8,7 +8,7 @@ export default function CTA() {
           Building APIs, agents, or infra?
         </h2>
         <Link 
-          href="#contact"
+          href="https://docs.google.com/forms/d/e/1FAIpQLSfdxN7dGchn4CNQAF9bJDA4PMWH8D8q3lc_kI4ytddkZ2fsjQ/viewform"
           className="inline-block px-10 py-4 border-2 border-black bg-black text-white font-semibold text-lg hover:bg-white hover:text-black transition-colors duration-200"
         >
           Let's talk →
