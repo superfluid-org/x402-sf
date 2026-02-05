@@ -1,0 +1,439 @@
+.venice-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 24px 96px;
+}
+
+.venice-hero {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.venice-hero h1 {
+  font-size: 48px;
+  margin: 0 0 16px;
+  color: #0f172a;
+}
+
+.venice-hero p {
+  font-size: 18px;
+  color: #475569;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.venice-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+}
+
+@media (max-width: 960px) {
+  .venice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.venice-main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.venice-card {
+  background: white;
+  padding: 24px;
+  border: 2px solid black;
+}
+
+.venice-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Subscription Card */
+.subscription-card {
+  background: #0f172a;
+  color: white;
+  border-color: #0f172a;
+}
+
+.subscription-card h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
+}
+
+.subscription-price {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.subscription-price span {
+  font-size: 16px;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.subscription-deposit {
+  font-size: 14px;
+  opacity: 0.7;
+  margin-bottom: 16px;
+}
+
+.subscription-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 14px;
+}
+
+.subscription-status.active {
+  background: rgba(34, 197, 94, 0.2);
+}
+
+.subscription-status.inactive {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* DIEM Staking Card */
+.staking-card h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.staking-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.staking-stat:last-child {
+  border-bottom: none;
+}
+
+.staking-stat-label {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.staking-stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* SUP PSA */
+.sup-psa {
+  background: #f8fafc;
+  border-color: black;
+}
+
+.sup-psa h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sup-psa p {
+  margin: 0;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+/* Chat Interface */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 500px;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 16px;
+}
+
+.chat-message {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+}
+
+.chat-message.user {
+  flex-direction: row-reverse;
+}
+
+.chat-avatar {
+  width: 32px;
+  height: 32px;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.chat-message.user .chat-avatar {
+  background: #0f172a;
+  color: white;
+}
+
+.chat-message.assistant .chat-avatar {
+  background: #334155;
+  color: white;
+}
+
+.chat-bubble {
+  max-width: 80%;
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.chat-message.user .chat-bubble {
+  background: #0f172a;
+  color: white;
+}
+
+.chat-message.assistant .chat-bubble {
+  background: white;
+  border: 1px solid #e5e7eb;
+}
+
+.chat-input-container {
+  display: flex;
+  gap: 12px;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 14px 16px;
+  border: 2px solid #e5e7eb;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.chat-input:focus {
+  border-color: #0f172a;
+}
+
+.chat-send-btn {
+  padding: 14px 24px;
+  background: #0f172a;
+  color: white;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  background: #1e293b;
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Loading States */
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #0f172a;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  background: #94a3b8;
+  border-radius: 50%;
+  animation: bounce 1.4s ease-in-out infinite;
+}
+
+.typing-indicator span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-4px);
+  }
+}
+
+/* CTA Card */
+.cta-card {
+  background: #0f172a;
+  color: white;
+  text-align: center;
+  border-color: #0f172a;
+}
+
+.cta-card h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.cta-card p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  opacity: 0.8;
+  line-height: 1.5;
+}
+
+.cta-btn {
+  display: inline-block;
+  padding: 12px 24px;
+  background: white;
+  color: #0f172a;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+  border: 2px solid white;
+}
+
+.cta-btn:hover {
+  background: transparent;
+  color: white;
+}
+
+/* Connect Wallet Overlay */
+.connect-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.connect-overlay h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.connect-overlay p {
+  margin: 0 0 20px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* Error State */
+.error-banner {
+  padding: 12px 16px;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+/* Gated content overlay */
+.gated-overlay {
+  position: relative;
+  min-height: 400px;
+}
+
+.gated-content {
+  filter: blur(8px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.gated-message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  padding: 32px;
+  border: 2px solid black;
+  text-align: center;
+  max-width: 400px;
+  z-index: 10;
+}
+
+.gated-message h3 {
+  margin: 0 0 12px;
+  font-size: 24px;
+}
+
+.gated-message p {
+  margin: 0 0 20px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.subscribe-btn {
+  padding: 14px 32px;
+  background: #0f172a;
+  color: white;
+  border: 2px solid #0f172a;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.subscribe-btn:hover:not(:disabled) {
+  background: white;
+  color: #0f172a;
+}
+
+.subscribe-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
