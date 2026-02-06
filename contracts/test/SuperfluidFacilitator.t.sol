@@ -413,6 +413,27 @@ contract SuperfluidFacilitatorTest is Test {
         assertEq(wrap, threshold - MIN_FEE);
     }
 
+    function test_calculateFeeBreakdown_zeroBasisPoints() public {
+        // Test flat fee mode (feeBasisPoints = 0)
+        // This was causing overflow before the fix: type(uint256).max + minFee
+        uint256 flatFee = 1_000_000; // 1 USDC flat fee
+
+        vm.prank(owner);
+        facilitator.setFeeConfig(flatFee, 0); // 0 basis points = flat fee only
+
+        // Test with 2 USDC payment (should wrap 1 USDC, keep 1 USDC fee)
+        uint256 totalValue = 2_000_000;
+        (uint256 wrap, uint256 fee) = facilitator.calculateFeeBreakdown(totalValue);
+        assertEq(fee, flatFee);
+        assertEq(wrap, totalValue - flatFee);
+
+        // Test with large payment (still flat fee, no percentage)
+        uint256 largeValue = 1_000_000_000; // 1000 USDC
+        (uint256 wrapLarge, uint256 feeLarge) = facilitator.calculateFeeBreakdown(largeValue);
+        assertEq(feeLarge, flatFee); // Still just 1 USDC fee
+        assertEq(wrapLarge, largeValue - flatFee);
+    }
+
     function test_calculateTotalForWrap() public view {
         // Want to wrap 1 USDC (1_000_000), what total do I need?
         (uint256 total, uint256 fee) = facilitator.calculateTotalForWrap(1_000_000);
