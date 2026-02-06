@@ -2,7 +2,7 @@ import { verifyMessage } from "viem";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 
-const RECIPIENT_ADDRESS = "0x4e1dfc95c49186c8D6fAf7a33064Cc74F6Af235D";
+const RECIPIENT_ADDRESS = "0xac808840f02c47C05507f48165d2222FF28EF4e1"; // DAO Treasury
 const USDCX_ADDRESS = "0xd04383398dd2426297da660f9cca3d439af9ce1b";
 const CFA_ADDRESS = "0x19ba78B9cDB05A877718841c574325fdB53601bb";
 

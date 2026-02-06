@@ -12,7 +12,7 @@ import Footer from "@/components/Footer";
 import "./venice.css";
 
 const FACILITATOR_URL = process.env.NEXT_PUBLIC_FACILITATOR_URL;
-const RECIPIENT_ADDRESS = "0x4e1dfc95c49186c8D6fAf7a33064Cc74F6Af235D";
+const RECIPIENT_ADDRESS = "0xac808840f02c47C05507f48165d2222FF28EF4e1"; // DAO Treasury
 const CFA_FORWARDER_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.cfaV1Forwarder;
 const CFA_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.cfa;
 
