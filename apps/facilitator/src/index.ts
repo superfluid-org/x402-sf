@@ -8,6 +8,7 @@ import {
   EIP3009_ABI,
   EIP3009_TYPES,
   EMPTY_BYTES,
+  FACILITATOR_CONTRACT_ABI,
   SUPER_TOKEN_ABI,
   calculateFlowRate,
   checkFlowPermissions,
@@ -38,9 +39,9 @@ if (!rpcUrl) {
 
 // Optional environment variables with defaults
 const port = Number(process.env.PORT || 4020);
-const allowedOrigins = process.env.ALLOWED_ORIGIN 
-  ? process.env.ALLOWED_ORIGIN.split(",") 
-  : ["http://localhost:3000", "http://localhost:5173"];
+const allowedOrigins = process.env.ALLOWED_ORIGIN
+  ? process.env.ALLOWED_ORIGIN.split(",")
+  : ["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"];
 
 const facilitatorPrivateKey = (privateKeyEnv.startsWith("0x") ? privateKeyEnv : `0x${privateKeyEnv}`) as Hex;
 
@@ -49,17 +50,25 @@ const walletClient = createFacilitatorWalletClient(facilitatorPrivateKey, rpcUrl
 const facilitatorAccount = walletClient.account;
 const facilitatorAddress = facilitatorAccount.address;
 
-// Fee calculation: max(0.1 USDC, 0.1% of desired wrap amount)
-const MIN_FEE = 100000n; // 0.1 USDC (6 decimals)
-const FEE_PERCENTAGE = 1000n; // 0.1% = 1/1000
+// Optional: deployed SuperfluidFacilitator contract address
+// When set, payments are processed via a single atomic contract call
+// instead of multiple EOA transactions.
+const contractAddress = process.env.FACILITATOR_CONTRACT_ADDRESS
+  ? getAddress(process.env.FACILITATOR_CONTRACT_ADDRESS)
+  : null;
 
-function calculateFee(wrapAmount: bigint): bigint {
-  const percentageFee = wrapAmount / FEE_PERCENTAGE;
-  return percentageFee > MIN_FEE ? percentageFee : MIN_FEE;
+// Address that receives EIP-3009 payments (contract if deployed, EOA otherwise)
+const payToAddress = contractAddress ?? facilitatorAddress;
+
+// Fee calculation: flat 1 USDC fee (matches contract config)
+const FLAT_FEE = 1_000_000n; // 1 USDC (6 decimals)
+
+function calculateFee(_wrapAmount: bigint): bigint {
+  return FLAT_FEE;
 }
 
 function calculateTotalWithFee(wrapAmount: bigint): bigint {
-  return wrapAmount + calculateFee(wrapAmount);
+  return wrapAmount + FLAT_FEE;
 }
 
 const app = new Hono();
@@ -95,7 +104,8 @@ app.get("/supported", (c) => {
 
 app.get("/info", (c) => {
   return c.json({
-    facilitator: facilitatorAddress,
+    facilitator: payToAddress,
+    ...(contractAddress ? { operator: facilitatorAddress, contractMode: true } : {}),
     network: "base",
     chainId: SUPER_TOKEN_CONFIG.chain.id,
     superToken: SUPER_TOKEN_CONFIG.superToken.address,
@@ -140,204 +150,219 @@ app.get("/resource", async (c) => {
       const v = parseInt(sig.slice(130, 132), 16);
       const totalPaid = BigInt(authorization.value);
       const executedTxs: Hash[] = [];
-      
+
       console.log("💰 [/resource] Received X-PAYMENT", {
         from: paymentAccount,
         totalPaidRaw: totalPaid.toString(),
         totalPaidUSDC: formatUnits(totalPaid, 6),
+        mode: contractAddress ? "contract" : "eoa",
       });
-      
-      let amountToWrap: bigint;
-      let fee: bigint;
-      
-      // If total <= 100.1 USDC, fee is fixed at 0.1, so wrap = total - 0.1
-      if (totalPaid <= calculateTotalWithFee(100000000n)) {
-        fee = MIN_FEE;
-        amountToWrap = totalPaid - fee;
-      } else {
-        // Fee is 0.1% of wrap, so: total = wrap + wrap/1000 = wrap * 1.001
-        amountToWrap = (totalPaid * 1000n) / 1001n;
-        fee = totalPaid - amountToWrap;
-      }
-      
-      // 1. Transfer USDC (full amount including fee)
-      const transferTxHash = await walletClient.writeContract({
-        account: facilitatorAccount,
-        chain: undefined,
-        address: SUPER_TOKEN_CONFIG.underlyingToken.address,
-        abi: EIP3009_ABI,
-        functionName: "transferWithAuthorization",
-        args: [paymentAccount as Address, facilitatorAddress, totalPaid, BigInt(authorization.validAfter), BigInt(authorization.validBefore), authorization.nonce as Hex, v, r, s],
-      });
-      executedTxs.push(transferTxHash);
-      await publicClient.waitForTransactionReceipt({ hash: transferTxHash });
-      
-      console.log("✅ [/resource] transferWithAuthorization", {
-        from: paymentAccount,
-        to: facilitatorAddress,
-        totalPaidUSDC: formatUnits(totalPaid, 6),
-        txHash: transferTxHash,
-      });
-      
-      // 2. Approve (only for amount to wrap, excluding fee)
-      const approvalHash = await ensureAllowance(publicClient, walletClient, facilitatorAddress, SUPER_TOKEN_CONFIG.superToken.address, SUPER_TOKEN_CONFIG.underlyingToken.address, amountToWrap);
-      if (approvalHash) {
-        executedTxs.push(approvalHash);
-        await publicClient.waitForTransactionReceipt({ hash: approvalHash });
-      }
-      
-      // 3. Wrap (only the amount after fee deduction)
-      const decimalDiff = SUPER_TOKEN_CONFIG.superToken.decimals - SUPER_TOKEN_CONFIG.underlyingToken.decimals;
-      const superTokenAmount = amountToWrap * (10n ** BigInt(decimalDiff));
-      
-      let wrapTxHash: Hash;
-      try {
-        wrapTxHash = await walletClient.writeContract({
-          account: facilitatorAccount,
-          chain: undefined,
-          address: SUPER_TOKEN_CONFIG.superToken.address,
-          abi: SUPER_TOKEN_ABI,
-          functionName: "upgradeTo",
-          args: [paymentAccount as Address, superTokenAmount, EMPTY_BYTES],
-        });
-        executedTxs.push(wrapTxHash);
-        await publicClient.waitForTransactionReceipt({ hash: wrapTxHash });
-        
-        console.log("✅ [/resource] upgradeTo (wrap underlying → super token)", {
-          to: paymentAccount,
-          superToken: SUPER_TOKEN_CONFIG.superToken.address,
-          amountSuperTokenRaw: superTokenAmount.toString(),
-          amountUnderlyingUSDC: formatUnits(amountToWrap, 6),
-          txHash: wrapTxHash,
-        });
-      } catch {
-        const upgradeHash = await walletClient.writeContract({
-          account: facilitatorAccount,
-          chain: undefined,
-          address: SUPER_TOKEN_CONFIG.superToken.address,
-          abi: SUPER_TOKEN_ABI,
-          functionName: "upgrade",
-          args: [superTokenAmount],
-        });
-        executedTxs.push(upgradeHash);
-        await publicClient.waitForTransactionReceipt({ hash: upgradeHash });
-        
-        wrapTxHash = await walletClient.writeContract({
-          account: facilitatorAccount,
-          chain: undefined,
-          address: SUPER_TOKEN_CONFIG.superToken.address,
-          abi: SUPER_TOKEN_ABI,
-          functionName: "transfer",
-          args: [paymentAccount as Address, superTokenAmount],
-        });
-        executedTxs.push(wrapTxHash);
-        await publicClient.waitForTransactionReceipt({ hash: wrapTxHash });
-        
-        console.log("✅ [/resource] upgrade + transfer (wrap & send super token)", {
-          to: paymentAccount,
-          superToken: SUPER_TOKEN_CONFIG.superToken.address,
-          amountSuperTokenRaw: superTokenAmount.toString(),
-          amountUnderlyingUSDC: formatUnits(amountToWrap, 6),
-          upgradeTxHash: upgradeHash,
-          transferTxHash: wrapTxHash,
-        });
-      }
-      
-      // 4. Create stream if recipient provided
-      let streamTxHash: Hash | null = null;
-      const recipientParam = c.req.query("recipient");
-      
-      if (recipientParam && isAddress(recipientParam)) {
-        const recipientAddress = getAddress(recipientParam);
-        
-        // Check if facilitator has ACL permissions
-        const { hasPermissions } = await checkFlowPermissions(
-          publicClient as any,
-          paymentAccount as Address,
-          facilitatorAddress
-        );
 
-        if (hasPermissions) {
-          try {
-            // Calculate flow rate from payment requirements or default to 1 USDC/month
+      // Calculate fee breakdown (mirrors contract logic - flat 1 USDC fee)
+      const fee = FLAT_FEE;
+      const amountToWrap = totalPaid - fee;
+
+      let primaryTxHash: Hash;
+      let streamTxHash: Hash | null = null;
+      let streamCreated = false;
+
+      if (contractAddress) {
+        // ── Contract mode: single atomic transaction ──
+        const authParams = {
+          validAfter: BigInt(authorization.validAfter),
+          validBefore: BigInt(authorization.validBefore),
+          nonce: authorization.nonce as Hex,
+          v,
+          r,
+          s,
+        };
+
+        // Determine stream parameters
+        let streamRecipient: Address = "0x0000000000000000000000000000000000000000";
+        let streamFlowRate = 0n;
+
+        const recipientParam = c.req.query("recipient");
+        if (recipientParam && isAddress(recipientParam)) {
+          const recipientAddr = getAddress(recipientParam);
+          const { hasPermissions } = await checkFlowPermissions(
+            publicClient as any,
+            paymentAccount as Address,
+            contractAddress,
+          );
+
+          if (hasPermissions) {
+            streamRecipient = recipientAddr;
             const monthlyAmountParam = c.req.query("monthlyAmount");
             const monthlyAmountUSDC = monthlyAmountParam ? BigInt(monthlyAmountParam) : 1000000n;
             const decimalDiff = SUPER_TOKEN_CONFIG.superToken.decimals - SUPER_TOKEN_CONFIG.underlyingToken.decimals;
             const monthlyAmountSuper = monthlyAmountUSDC * (10n ** BigInt(decimalDiff));
-            const streamFlowRate = calculateFlowRate(monthlyAmountSuper);
-            
-            streamTxHash = await createFlow(
-              walletClient,
-              paymentAccount as Address,
-              recipientAddress,
-              streamFlowRate,
-            );
-            executedTxs.push(streamTxHash);
-            await publicClient.waitForTransactionReceipt({ hash: streamTxHash });
-            
-            console.log("🌊 [/resource] Created Superfluid stream", {
+            streamFlowRate = calculateFlowRate(monthlyAmountSuper);
+          } else {
+            console.log("ℹ️ [/resource] No ACL permissions for stream", {
               from: paymentAccount,
-              to: recipientAddress,
-              monthlyAmountUSDC: formatUnits(monthlyAmountUSDC, 6),
-              flowRateWeiPerSecond: streamFlowRate.toString(),
-              txHash: streamTxHash,
-            });
-          } catch (streamError) {
-            // Stream creation failed, but wrap succeeded - log but don't fail
-            console.warn("⚠️ [/resource] Stream creation failed", {
-              from: paymentAccount,
-              recipient: recipientAddress,
-              error: `${streamError}`,
+              operator: contractAddress,
             });
           }
+        }
+
+        if (streamFlowRate > 0n) {
+          primaryTxHash = await walletClient.writeContract({
+            account: facilitatorAccount,
+            chain: undefined,
+            address: contractAddress,
+            abi: FACILITATOR_CONTRACT_ABI,
+            functionName: "processPayment",
+            args: [paymentAccount as Address, totalPaid, authParams, streamRecipient, streamFlowRate],
+          });
+          streamCreated = true;
+          streamTxHash = primaryTxHash;
         } else {
-          console.log("ℹ️ [/resource] Facilitator lacks ACL permissions for stream creation", {
-            from: paymentAccount,
-            operator: facilitatorAddress,
-            recipient: recipientAddress,
+          primaryTxHash = await walletClient.writeContract({
+            account: facilitatorAccount,
+            chain: undefined,
+            address: contractAddress,
+            abi: FACILITATOR_CONTRACT_ABI,
+            functionName: "processPaymentWrapOnly",
+            args: [paymentAccount as Address, totalPaid, authParams],
           });
         }
+        executedTxs.push(primaryTxHash);
+        await publicClient.waitForTransactionReceipt({ hash: primaryTxHash });
+
+        console.log("✅ [/resource] Contract processPayment", {
+          from: paymentAccount,
+          totalPaidUSDC: formatUnits(totalPaid, 6),
+          wrappedUSDC: formatUnits(amountToWrap, 6),
+          feeUSDC: formatUnits(fee, 6),
+          streamCreated,
+          txHash: primaryTxHash,
+        });
+      } else {
+        // ── Legacy EOA mode: multi-tx flow ──
+        // 1. Transfer USDC (full amount including fee)
+        const transferTxHash = await walletClient.writeContract({
+          account: facilitatorAccount,
+          chain: undefined,
+          address: SUPER_TOKEN_CONFIG.underlyingToken.address,
+          abi: EIP3009_ABI,
+          functionName: "transferWithAuthorization",
+          args: [paymentAccount as Address, facilitatorAddress, totalPaid, BigInt(authorization.validAfter), BigInt(authorization.validBefore), authorization.nonce as Hex, v, r, s],
+        });
+        executedTxs.push(transferTxHash);
+        await publicClient.waitForTransactionReceipt({ hash: transferTxHash });
+
+        // 2. Approve
+        const approvalHash = await ensureAllowance(publicClient, walletClient, facilitatorAddress, SUPER_TOKEN_CONFIG.superToken.address, SUPER_TOKEN_CONFIG.underlyingToken.address, amountToWrap);
+        if (approvalHash) {
+          executedTxs.push(approvalHash);
+          await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+        }
+
+        // 3. Wrap
+        const decimalDiff = SUPER_TOKEN_CONFIG.superToken.decimals - SUPER_TOKEN_CONFIG.underlyingToken.decimals;
+        const superTokenAmount = amountToWrap * (10n ** BigInt(decimalDiff));
+
+        try {
+          primaryTxHash = await walletClient.writeContract({
+            account: facilitatorAccount,
+            chain: undefined,
+            address: SUPER_TOKEN_CONFIG.superToken.address,
+            abi: SUPER_TOKEN_ABI,
+            functionName: "upgradeTo",
+            args: [paymentAccount as Address, superTokenAmount, EMPTY_BYTES],
+          });
+          executedTxs.push(primaryTxHash);
+          await publicClient.waitForTransactionReceipt({ hash: primaryTxHash });
+        } catch {
+          const upgradeHash = await walletClient.writeContract({
+            account: facilitatorAccount,
+            chain: undefined,
+            address: SUPER_TOKEN_CONFIG.superToken.address,
+            abi: SUPER_TOKEN_ABI,
+            functionName: "upgrade",
+            args: [superTokenAmount],
+          });
+          executedTxs.push(upgradeHash);
+          await publicClient.waitForTransactionReceipt({ hash: upgradeHash });
+
+          primaryTxHash = await walletClient.writeContract({
+            account: facilitatorAccount,
+            chain: undefined,
+            address: SUPER_TOKEN_CONFIG.superToken.address,
+            abi: SUPER_TOKEN_ABI,
+            functionName: "transfer",
+            args: [paymentAccount as Address, superTokenAmount],
+          });
+          executedTxs.push(primaryTxHash);
+          await publicClient.waitForTransactionReceipt({ hash: primaryTxHash });
+        }
+
+        // 4. Create stream if recipient provided
+        const recipientParam = c.req.query("recipient");
+        if (recipientParam && isAddress(recipientParam)) {
+          const recipientAddr = getAddress(recipientParam);
+          const { hasPermissions } = await checkFlowPermissions(
+            publicClient as any,
+            paymentAccount as Address,
+            facilitatorAddress,
+          );
+
+          if (hasPermissions) {
+            try {
+              const monthlyAmountParam = c.req.query("monthlyAmount");
+              const monthlyAmountUSDC = monthlyAmountParam ? BigInt(monthlyAmountParam) : 1000000n;
+              const decimalDiff2 = SUPER_TOKEN_CONFIG.superToken.decimals - SUPER_TOKEN_CONFIG.underlyingToken.decimals;
+              const monthlyAmountSuper = monthlyAmountUSDC * (10n ** BigInt(decimalDiff2));
+              const streamFlowRate = calculateFlowRate(monthlyAmountSuper);
+
+              streamTxHash = await createFlow(walletClient, paymentAccount as Address, recipientAddr, streamFlowRate);
+              executedTxs.push(streamTxHash);
+              await publicClient.waitForTransactionReceipt({ hash: streamTxHash });
+              streamCreated = true;
+            } catch (streamError) {
+              console.warn("⚠️ [/resource] Stream creation failed", { error: `${streamError}` });
+            }
+          }
+        }
       }
-      
+
       // Set X-PAYMENT-RESPONSE header
-      const paymentResponse = { 
-        success: true, 
-        txHash: wrapTxHash, 
+      const paymentResponse = {
+        success: true,
+        txHash: primaryTxHash!,
         transactions: executedTxs,
         fee: fee.toString(),
         wrapped: amountToWrap.toString(),
-        streamCreated: streamTxHash !== null,
-        streamTxHash: streamTxHash,
+        streamCreated,
+        streamTxHash,
       };
       c.header("X-PAYMENT-RESPONSE", Buffer.from(JSON.stringify(paymentResponse)).toString("base64"));
-      
+
       const updatedBalances = await getWrapPreflight(publicClient, paymentAccount as Address);
-      
-      // Format amounts for display (USDC has 6 decimals)
       const wrappedFormatted = formatUnits(amountToWrap, 6);
       const feeFormatted = formatUnits(fee, 6);
-      
+
       const responseBody = {
         status: "ok",
         account: paymentAccount,
         superTokenBalance: updatedBalances.superTokenBalance.toString(),
-        message: streamTxHash 
+        message: streamCreated
           ? `Access granted! Wrapped ${wrappedFormatted} USDC to USDCx and created stream (fee: ${feeFormatted} USDC)`
           : `Access granted! Wrapped ${wrappedFormatted} USDC to USDCx (fee: ${feeFormatted} USDC)`,
         transactions: executedTxs,
         fee: fee.toString(),
         wrapped: amountToWrap.toString(),
-        streamCreated: streamTxHash !== null,
-        streamTxHash: streamTxHash,
+        streamCreated,
+        streamTxHash,
         imageUrl: "https://i.imgur.com/k2tPAGC.jpeg",
       };
 
-      console.log("✅ [/resource] Payment + wrap completed", {
+      console.log("✅ [/resource] Payment completed", {
         account: paymentAccount,
         wrappedUSDC: wrappedFormatted,
         feeUSDC: feeFormatted,
-        streamCreated: responseBody.streamCreated,
-        streamTxHash: responseBody.streamTxHash,
+        streamCreated,
+        mode: contractAddress ? "contract" : "eoa",
       });
 
       return c.json(responseBody);
@@ -406,7 +431,7 @@ app.get("/resource", async (c) => {
     superToken: SUPER_TOKEN_CONFIG.superToken.address,
     wrapAmount: desiredWrapAmount.toString(),
     fee: fee.toString(),
-    facilitator: facilitatorAddress,
+    facilitator: payToAddress,
     cfaV1Forwarder: SUPER_TOKEN_CONFIG.superfluid.cfaV1Forwarder,
     stream: {
       recipient: recipientAddress,
@@ -433,7 +458,7 @@ app.get("/resource", async (c) => {
           network: "base",
           maxAmountRequired: totalRequired.toString(),
           asset: SUPER_TOKEN_CONFIG.underlyingToken.address,
-          payTo: facilitatorAddress,
+          payTo: payToAddress,
           resource: resourceUrl,
           description: `Wrap ${desiredWrapAmount.toString()} USDC & start stream to ${recipientAddress} (${fee.toString()} USDC fee)`,
           mimeType: "application/json",
@@ -482,7 +507,7 @@ app.post("/verify", async (c) => {
     // Verify the EIP-3009 signature
     const authMessage = {
       from: account as Address,
-      to: facilitatorAddress,
+      to: payToAddress,
       value: BigInt(authorization.value),
       validAfter: BigInt(authorization.validAfter),
       validBefore: BigInt(authorization.validBefore),
@@ -553,91 +578,113 @@ app.post("/settle", async (c) => {
 
     const totalPaid = BigInt(authorization.value);
     const executedTxs: Hash[] = [];
-    
-    let amountToWrap: bigint;
-    let fee: bigint;
-    
-    if (totalPaid <= calculateTotalWithFee(100000000n)) {
-      fee = MIN_FEE;
-      amountToWrap = totalPaid - fee;
-    } else {
-      amountToWrap = (totalPaid * 1000n) / 1001n;
-      fee = totalPaid - amountToWrap;
-    }
+
+    // Calculate fee breakdown (flat 1 USDC fee)
+    const fee = FLAT_FEE;
+    const amountToWrap = totalPaid - fee;
 
     try {
-      const transferTxHash = await walletClient.writeContract({
-        account: facilitatorAccount,
-        chain: undefined,
-        address: SUPER_TOKEN_CONFIG.underlyingToken.address,
-        abi: EIP3009_ABI,
-        functionName: "transferWithAuthorization",
-        args: [
-          account as Address,
-          facilitatorAddress,
-          totalPaid,
-          BigInt(authorization.validAfter),
-          BigInt(authorization.validBefore),
-          authorization.nonce as Hex,
+      let primaryTxHash: Hash;
+      let streamTxHash: Hash | null = null;
+      let streamCreated = false;
+
+      if (contractAddress) {
+        // ── Contract mode: single atomic transaction ──
+        const authParams = {
+          validAfter: BigInt(authorization.validAfter),
+          validBefore: BigInt(authorization.validBefore),
+          nonce: authorization.nonce as Hex,
           v,
           r,
           s,
-        ],
-      });
-      executedTxs.push(transferTxHash);
-      await publicClient.waitForTransactionReceipt({ hash: transferTxHash });
+        };
 
-      const approvalHash = await ensureAllowance(
-        publicClient,
-        walletClient,
-        facilitatorAddress,
-        SUPER_TOKEN_CONFIG.superToken.address,
-        SUPER_TOKEN_CONFIG.underlyingToken.address,
-        amountToWrap,
-      );
-      if (approvalHash) {
-        executedTxs.push(approvalHash);
-        await publicClient.waitForTransactionReceipt({ hash: approvalHash });
-      }
+        let streamRecipient: Address = "0x0000000000000000000000000000000000000000";
+        let streamFlowRate = 0n;
 
-      const decimalDiff = SUPER_TOKEN_CONFIG.superToken.decimals - SUPER_TOKEN_CONFIG.underlyingToken.decimals;
-      const superTokenAmount = amountToWrap * (10n ** BigInt(decimalDiff));
-
-      const wrapTxHash = await walletClient.writeContract({
-        account: facilitatorAccount,
-        chain: undefined,
-        address: SUPER_TOKEN_CONFIG.superToken.address,
-        abi: SUPER_TOKEN_ABI,
-        functionName: "upgradeTo",
-        args: [account as Address, superTokenAmount, EMPTY_BYTES],
-      });
-      executedTxs.push(wrapTxHash);
-      await publicClient.waitForTransactionReceipt({ hash: wrapTxHash });
-
-      // Check if stream should be created (from payment requirements extra field)
-      let streamTxHash: Hash | null = null;
-      if (paymentRequirements?.extra?.stream) {
-        const { recipient, flowRate } = paymentRequirements.extra.stream;
-        
-        // Check if facilitator has ACL permissions
-        const { hasPermissions } = await checkFlowPermissions(
-          publicClient as any,
-          account as Address,
-          facilitatorAddress
-        );
-
-        if (hasPermissions && recipient && flowRate) {
-          try {
-            streamTxHash = await createFlow(
-              walletClient,
+        if (paymentRequirements?.extra?.stream) {
+          const { recipient, flowRate } = paymentRequirements.extra.stream;
+          if (recipient && flowRate) {
+            const { hasPermissions } = await checkFlowPermissions(
+              publicClient as any,
               account as Address,
-              recipient as Address,
-              BigInt(flowRate),
+              contractAddress,
             );
-            executedTxs.push(streamTxHash);
-            await publicClient.waitForTransactionReceipt({ hash: streamTxHash });
-          } catch (streamError) {
-            console.warn("Stream creation failed:", streamError);
+            if (hasPermissions) {
+              streamRecipient = recipient as Address;
+              streamFlowRate = BigInt(flowRate);
+            }
+          }
+        }
+
+        if (streamFlowRate > 0n) {
+          primaryTxHash = await walletClient.writeContract({
+            account: facilitatorAccount,
+            chain: undefined,
+            address: contractAddress,
+            abi: FACILITATOR_CONTRACT_ABI,
+            functionName: "processPayment",
+            args: [account as Address, totalPaid, authParams, streamRecipient, streamFlowRate],
+          });
+          streamCreated = true;
+          streamTxHash = primaryTxHash;
+        } else {
+          primaryTxHash = await walletClient.writeContract({
+            account: facilitatorAccount,
+            chain: undefined,
+            address: contractAddress,
+            abi: FACILITATOR_CONTRACT_ABI,
+            functionName: "processPaymentWrapOnly",
+            args: [account as Address, totalPaid, authParams],
+          });
+        }
+        executedTxs.push(primaryTxHash);
+        await publicClient.waitForTransactionReceipt({ hash: primaryTxHash });
+      } else {
+        // ── Legacy EOA mode ──
+        const transferTxHash = await walletClient.writeContract({
+          account: facilitatorAccount,
+          chain: undefined,
+          address: SUPER_TOKEN_CONFIG.underlyingToken.address,
+          abi: EIP3009_ABI,
+          functionName: "transferWithAuthorization",
+          args: [account as Address, facilitatorAddress, totalPaid, BigInt(authorization.validAfter), BigInt(authorization.validBefore), authorization.nonce as Hex, v, r, s],
+        });
+        executedTxs.push(transferTxHash);
+        await publicClient.waitForTransactionReceipt({ hash: transferTxHash });
+
+        const approvalHash = await ensureAllowance(publicClient, walletClient, facilitatorAddress, SUPER_TOKEN_CONFIG.superToken.address, SUPER_TOKEN_CONFIG.underlyingToken.address, amountToWrap);
+        if (approvalHash) {
+          executedTxs.push(approvalHash);
+          await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+        }
+
+        const decimalDiff = SUPER_TOKEN_CONFIG.superToken.decimals - SUPER_TOKEN_CONFIG.underlyingToken.decimals;
+        const superTokenAmount = amountToWrap * (10n ** BigInt(decimalDiff));
+
+        primaryTxHash = await walletClient.writeContract({
+          account: facilitatorAccount,
+          chain: undefined,
+          address: SUPER_TOKEN_CONFIG.superToken.address,
+          abi: SUPER_TOKEN_ABI,
+          functionName: "upgradeTo",
+          args: [account as Address, superTokenAmount, EMPTY_BYTES],
+        });
+        executedTxs.push(primaryTxHash);
+        await publicClient.waitForTransactionReceipt({ hash: primaryTxHash });
+
+        if (paymentRequirements?.extra?.stream) {
+          const { recipient, flowRate } = paymentRequirements.extra.stream;
+          const { hasPermissions } = await checkFlowPermissions(publicClient as any, account as Address, facilitatorAddress);
+          if (hasPermissions && recipient && flowRate) {
+            try {
+              streamTxHash = await createFlow(walletClient, account as Address, recipient as Address, BigInt(flowRate));
+              executedTxs.push(streamTxHash);
+              await publicClient.waitForTransactionReceipt({ hash: streamTxHash });
+              streamCreated = true;
+            } catch (streamError) {
+              console.warn("Stream creation failed:", streamError);
+            }
           }
         }
       }
@@ -650,8 +697,8 @@ app.post("/settle", async (c) => {
         transactions: executedTxs,
         fee: fee.toString(),
         wrapped: amountToWrap.toString(),
-        streamCreated: streamTxHash !== null,
-        streamTxHash: streamTxHash,
+        streamCreated,
+        streamTxHash,
       });
     } catch (error) {
       return c.json({
@@ -677,15 +724,15 @@ export default app;
 // Only start server if not on Vercel (local development)
 if (!process.env.VERCEL) {
   console.log(`
-🚀 x402-Compliant Superfluid Facilitator
+x402-Compliant Superfluid Facilitator
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📍 Facilitator: ${facilitatorAddress}
-🔗 Network: Base Mainnet
-💰 Scheme: exact (EIP-3009)
-🎁 Auto-Wrap & Stream: USDC → USDCx → Stream
-💵 Fee: max(0.1 USDC, 0.1% of amount)
-🎯 Recipient: Specified per request
-🌐 Port: ${port}
+  Mode:       ${contractAddress ? "Contract" : "EOA (legacy)"}
+  PayTo:      ${payToAddress}
+  Operator:   ${facilitatorAddress}${contractAddress ? `\n  Contract:   ${contractAddress}` : ""}
+  Network:    Base Mainnet
+  Scheme:     exact (EIP-3009)
+  Fee:        max(0.1 USDC, 0.1% of amount)
+  Port:       ${port}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
 

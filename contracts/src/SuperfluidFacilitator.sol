@@ -14,8 +14,8 @@ import {ICFAv1Forwarder} from "./interfaces/ICFAv1Forwarder.sol";
 ///         Accepts USDC via EIP-3009, wraps to USDCx, sends to users, and creates
 ///         Superfluid streams. Replaces the EOA-based facilitator for custody safety.
 ///
-/// @dev    Uses receiveWithAuthorization (not transferWithAuthorization) for
-///         front-running protection as recommended by EIP-3009 for contract payees.
+/// @dev    Uses transferWithAuthorization to match the EIP-712 type hash
+///         signed by x402-axios clients (TransferWithAuthorization).
 ///
 ///         Security model:
 ///         - Owner (cold wallet / multisig): admin functions, treasury withdrawal
@@ -233,7 +233,7 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
     // Internal helpers
     // ──────────────────────────────────────────────
 
-    /// @dev Pull USDC via receiveWithAuthorization, wrap to USDCx, track fees.
+    /// @dev Pull USDC via transferWithAuthorization, wrap to USDCx, track fees.
     function _pullAndWrap(
         address from,
         uint256 value,
@@ -242,8 +242,8 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
         (amountToWrap, fee) = calculateFeeBreakdown(value);
         if (amountToWrap == 0) revert InsufficientPayment();
 
-        // Pull USDC via receiveWithAuthorization (front-running safe)
-        usdc.receiveWithAuthorization(
+        // Pull USDC via transferWithAuthorization (matches x402-axios signature type)
+        usdc.transferWithAuthorization(
             from,
             address(this),
             value,
@@ -300,10 +300,15 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
             return (0, totalValue);
         }
 
+        // If no percentage fee, just use flat minFee
+        if (feeBasisPoints == 0) {
+            fee = minFee;
+            amountToWrap = totalValue - fee;
+            return (amountToWrap, fee);
+        }
+
         // Threshold where percentage fee equals minFee.
-        uint256 thresholdWrap = feeBasisPoints > 0
-            ? (minFee * 10000) / feeBasisPoints
-            : type(uint256).max;
+        uint256 thresholdWrap = (minFee * 10000) / feeBasisPoints;
         uint256 threshold = thresholdWrap + minFee;
 
         if (totalValue <= threshold) {

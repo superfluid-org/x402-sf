@@ -16,17 +16,25 @@ const RECIPIENT_ADDRESS = "0x4e1dfc95c49186c8D6fAf7a33064Cc74F6Af235D";
 const CFA_FORWARDER_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.cfaV1Forwarder;
 const CFA_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.cfa;
 
+// 1 USDCx per month flow rate (18 decimals)
+// Superfluid uses (365/12) days per month = 2628000 seconds
+const MONTHLY_AMOUNT = BigInt("1000000000000000000"); // 1e18
+const SECONDS_PER_MONTH = BigInt(2628000); // (365/12) * 24 * 60 * 60
+const SUBSCRIPTION_FLOW_RATE = MONTHLY_AMOUNT / SECONDS_PER_MONTH;
+
 // ABIs
 const CFA_FORWARDER_ABI = [
   {
-    name: "grantPermissions",
+    name: "updateFlowOperatorPermissions",
     type: "function",
     stateMutability: "nonpayable",
     inputs: [
       { name: "token", type: "address" },
       { name: "flowOperator", type: "address" },
+      { name: "permissions", type: "uint8" },  // bitmask: 1=create, 2=update, 4=delete, 7=all
+      { name: "flowrateAllowance", type: "int96" },
     ],
-    outputs: [],
+    outputs: [{ name: "", type: "bool" }],
   },
 ] as const;
 
@@ -235,15 +243,18 @@ export default function VeniceChatPage() {
         throw new Error("No account available in wallet client");
       }
 
+      // permissions bitmask: 1=create, 2=update, 4=delete, 7=all
       const hash = await walletClient.writeContract({
         account: walletClient.account,
         chain: base,
         address: CFA_FORWARDER_ADDRESS,
         abi: CFA_FORWARDER_ABI,
-        functionName: "grantPermissions",
+        functionName: "updateFlowOperatorPermissions",
         args: [
           SUPER_TOKEN_CONFIG.superToken.address,
           facilitatorAddress as `0x${string}`,
+          7,  // permissions: create + update + delete
+          SUBSCRIPTION_FLOW_RATE,
         ],
       });
 
@@ -389,8 +400,11 @@ export default function VeniceChatPage() {
 
   const formatFlowRate = (flowRate: bigint) => {
     if (flowRate === BigInt(0)) return "0";
-    const monthly = flowRate * BigInt(2592000);
-    return formatUnits(monthly, 18);
+    const monthly = flowRate * BigInt(2628000); // Superfluid's (365/12) days
+    const formatted = formatUnits(monthly, 18);
+    // Round to 2 decimal places to avoid 0.999999...
+    const rounded = Math.round(parseFloat(formatted) * 100) / 100;
+    return rounded.toString();
   };
 
   return (
@@ -574,6 +588,27 @@ export default function VeniceChatPage() {
                     </>
                   )}
                 </div>
+                {subscriptionStatus === "active" && (
+                  <a
+                    href="https://app.superfluid.org/token/base/0xd04383398dd2426297da660f9cca3d439af9ce1b"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "inline-block",
+                      marginTop: 12,
+                      padding: "8px 16px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#10b981",
+                      border: "1px solid #10b981",
+                      borderRadius: 6,
+                      textDecoration: "none",
+                      textAlign: "center",
+                    }}
+                  >
+                    View Stream Dashboard →
+                  </a>
+                )}
               </div>
 
               <div className="venice-card staking-card">
@@ -610,32 +645,6 @@ export default function VeniceChatPage() {
                 </p>
               </div>
 
-              <div className="venice-card cta-card">
-                <h3>Join Our Community</h3>
-                <p>
-                  Subscribe for 1 USDCx/month. Your stream goes directly to the Superfluid DAO to fund community AI infrastructure.
-                </p>
-                {subscriptionStatus !== "active" && isConnected && isOnBase && (
-                  <button
-                    type="button"
-                    className="cta-btn"
-                    onClick={handleSubscribe}
-                    style={{ cursor: "pointer", border: "none" }}
-                  >
-                    Subscribe Now
-                  </button>
-                )}
-                {subscriptionStatus === "active" && (
-                  <a
-                    href="https://app.superfluid.org/token/base/0xd04383398dd2426297da660f9cca3d439af9ce1b"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="cta-btn"
-                  >
-                    View Stream Dashboard
-                  </a>
-                )}
-              </div>
             </div>
           </div>
         </div>

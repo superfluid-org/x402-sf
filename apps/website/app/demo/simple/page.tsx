@@ -19,17 +19,25 @@ const RECIPIENT_ADDRESS = "0x4e1dfc95c49186c8D6fAf7a33064Cc74F6Af235D";
 const CFA_FORWARDER_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.cfaV1Forwarder;
 const CFA_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.cfa;
 
-// CFA Forwarder ABI for granting permissions
+// 1 USDCx per month flow rate (18 decimals)
+// Superfluid uses (365/12) days per month = 2628000 seconds
+const MONTHLY_AMOUNT = BigInt("1000000000000000000"); // 1e18
+const SECONDS_PER_MONTH = BigInt(2628000); // (365/12) * 24 * 60 * 60
+const SUBSCRIPTION_FLOW_RATE = MONTHLY_AMOUNT / SECONDS_PER_MONTH;
+
+// CFA Forwarder ABI for scoped flow permissions
 const CFA_FORWARDER_ABI = [
   {
-    name: "grantPermissions",
+    name: "updateFlowOperatorPermissions",
     type: "function",
     stateMutability: "nonpayable",
     inputs: [
       { name: "token", type: "address" },
       { name: "flowOperator", type: "address" },
+      { name: "permissions", type: "uint8" },  // bitmask: 1=create, 2=update, 4=delete, 7=all
+      { name: "flowrateAllowance", type: "int96" },
     ],
-    outputs: [],
+    outputs: [{ name: "", type: "bool" }],
   },
 ] as const;
 
@@ -170,16 +178,19 @@ export default function DemoPage() {
         transport: http(),
       });
 
-      // Use walletClient directly to write contract
+      // Grant scoped permissions (create/update/delete) with flow rate limit
+      // permissions bitmask: 1=create, 2=update, 4=delete, 7=all
       const hash = await walletClient.writeContract({
         account: walletClient.account,
         chain: base,
         address: CFA_FORWARDER_ADDRESS,
         abi: CFA_FORWARDER_ABI,
-        functionName: "grantPermissions",
+        functionName: "updateFlowOperatorPermissions",
         args: [
           SUPER_TOKEN_CONFIG.superToken.address,
           facilitatorAddress as `0x${string}`,
+          7,  // permissions: create + update + delete
+          SUBSCRIPTION_FLOW_RATE,
         ],
       });
 

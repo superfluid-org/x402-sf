@@ -7,15 +7,15 @@ import {SuperfluidFacilitator} from "../src/SuperfluidFacilitator.sol";
 /// @title DeploySuperfluidFacilitator
 /// @notice Deploy script for Base mainnet.
 ///
-/// Usage:
+/// Usage (with cast wallet):
 ///   forge script script/DeploySuperfluidFacilitator.s.sol:DeploySuperfluidFacilitator \
 ///     --rpc-url base \
+///     --account ensdeployer \
 ///     --broadcast \
 ///     --verify \
 ///     -vvvv
 ///
 /// Required environment variables:
-///   PRIVATE_KEY         - Deployer private key
 ///   OWNER_ADDRESS       - Contract owner (cold wallet / multisig)
 ///   OPERATOR_ADDRESS    - Server hot wallet
 ///   TREASURY_ADDRESS    - Fee withdrawal destination
@@ -29,7 +29,7 @@ contract DeploySuperfluidFacilitator is Script {
     address constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
 
     /// @dev USDCx Super Token on Base
-    address constant USDCx = 0xd04383398dD2426297dA660f9CcA3d439Af31571;
+    address constant USDCx = 0xD04383398dD2426297da660F9CCA3d439AF9ce1b;
 
     /// @dev Superfluid CFA V1 Forwarder (same on all chains)
     address constant CFA_FORWARDER = 0xcfA132E353cB4E398080B9700609bb008eceB125;
@@ -38,17 +38,17 @@ contract DeploySuperfluidFacilitator is Script {
     // Default fee config
     // ──────────────────────────────────────────────
 
-    /// @dev 0.1 USDC minimum fee (6 decimals)
-    uint256 constant MIN_FEE = 100_000;
+    /// @dev 1 USDC flat fee (6 decimals)
+    uint256 constant MIN_FEE = 1_000_000;
 
-    /// @dev 0.1% fee (10 basis points)
-    uint256 constant FEE_BASIS_POINTS = 10;
+    /// @dev 0% fee (flat fee only, no percentage)
+    uint256 constant FEE_BASIS_POINTS = 0;
 
     /// @dev USDC (6 dec) → USDCx (18 dec) scaling factor
     uint256 constant DECIMAL_SCALE_FACTOR = 1e12;
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        // When using --account flag, no private key env var needed
         address ownerAddress = vm.envAddress("OWNER_ADDRESS");
         address operatorAddress = vm.envAddress("OPERATOR_ADDRESS");
         address treasuryAddress = vm.envAddress("TREASURY_ADDRESS");
@@ -65,7 +65,7 @@ contract DeploySuperfluidFacilitator is Script {
         console2.log("  Min Fee:          ", MIN_FEE);
         console2.log("  Fee Basis Points: ", FEE_BASIS_POINTS);
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         SuperfluidFacilitator facilitator = new SuperfluidFacilitator(
             ownerAddress,

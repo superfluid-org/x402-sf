@@ -55,6 +55,66 @@ const superTokenAbi = [
 
 export const SUPER_TOKEN_ABI = superTokenAbi;
 
+// SuperfluidFacilitator contract ABI (only the functions we need)
+export const FACILITATOR_CONTRACT_ABI = [
+  {
+    name: "processPayment",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "from", type: "address" },
+      { name: "value", type: "uint256" },
+      {
+        name: "auth",
+        type: "tuple",
+        components: [
+          { name: "validAfter", type: "uint256" },
+          { name: "validBefore", type: "uint256" },
+          { name: "nonce", type: "bytes32" },
+          { name: "v", type: "uint8" },
+          { name: "r", type: "bytes32" },
+          { name: "s", type: "bytes32" },
+        ],
+      },
+      { name: "recipient", type: "address" },
+      { name: "flowRate", type: "int96" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "processPaymentWrapOnly",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "from", type: "address" },
+      { name: "value", type: "uint256" },
+      {
+        name: "auth",
+        type: "tuple",
+        components: [
+          { name: "validAfter", type: "uint256" },
+          { name: "validBefore", type: "uint256" },
+          { name: "nonce", type: "bytes32" },
+          { name: "v", type: "uint8" },
+          { name: "r", type: "bytes32" },
+          { name: "s", type: "bytes32" },
+        ],
+      },
+    ],
+    outputs: [],
+  },
+  {
+    name: "calculateFeeBreakdown",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "totalValue", type: "uint256" }],
+    outputs: [
+      { name: "amountToWrap", type: "uint256" },
+      { name: "fee", type: "uint256" },
+    ],
+  },
+] as const;
+
 export const EIP3009_ABI = [
   {
     name: "transferWithAuthorization",
@@ -269,13 +329,15 @@ export async function checkFlowPermissions(
   };
 }
 
+// Superfluid uses (365/12) days per month = 2628000 seconds
+const SECONDS_PER_MONTH = 2628000n;
+
 export function calculateFlowRate(monthlyAmount: bigint): bigint {
-  // 1 month ≈ 2592000 seconds (30 days)
-  return monthlyAmount / 2592000n;
+  return monthlyAmount / SECONDS_PER_MONTH;
 }
 
 export function calculateMonthlyAmount(flowRate: bigint): bigint {
-  return flowRate * 2592000n;
+  return flowRate * SECONDS_PER_MONTH;
 }
 
 export async function getFlowRate(

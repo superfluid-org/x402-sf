@@ -74,15 +74,15 @@ contract SuperfluidFacilitatorForkTest is Test {
     // ──────────────────────────────────────────────
 
     address constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    address constant USDCx = 0xd04383398dD2426297dA660f9CcA3d439Af31571;
+    address constant USDCx = 0xD04383398dD2426297da660F9CCA3d439AF9ce1b;
     address constant CFA_FORWARDER = 0xcfA132E353cB4E398080B9700609bb008eceB125;
 
     // ──────────────────────────────────────────────
     // EIP-712 constants for USDC on Base
     // ──────────────────────────────────────────────
 
-    bytes32 constant RECEIVE_WITH_AUTHORIZATION_TYPEHASH = keccak256(
-        "ReceiveWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)"
+    bytes32 constant TRANSFER_WITH_AUTHORIZATION_TYPEHASH = keccak256(
+        "TransferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)"
     );
 
     // ──────────────────────────────────────────────
@@ -158,8 +158,8 @@ contract SuperfluidFacilitatorForkTest is Test {
         );
     }
 
-    /// @dev Sign a receiveWithAuthorization for the given params.
-    function _signReceiveAuth(
+    /// @dev Sign a transferWithAuthorization for the given params.
+    function _signTransferAuth(
         uint256 signerKey,
         address from,
         address to,
@@ -170,7 +170,7 @@ contract SuperfluidFacilitatorForkTest is Test {
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
         bytes32 structHash = keccak256(
             abi.encode(
-                RECEIVE_WITH_AUTHORIZATION_TYPEHASH,
+                TRANSFER_WITH_AUTHORIZATION_TYPEHASH,
                 from,
                 to,
                 value,
@@ -216,7 +216,7 @@ contract SuperfluidFacilitatorForkTest is Test {
         (uint256 expectedWrap, uint256 expectedFee) = facilitator.calculateFeeBreakdown(totalValue);
 
         // Sign the receiveWithAuthorization (verified by real USDC contract)
-        (uint8 v, bytes32 r, bytes32 s) = _signReceiveAuth(
+        (uint8 v, bytes32 r, bytes32 s) = _signTransferAuth(
             userKey, user, address(facilitator), totalValue, 0, type(uint256).max, nonce
         );
 
@@ -255,7 +255,7 @@ contract SuperfluidFacilitatorForkTest is Test {
         bytes32 nonce1 = bytes32(uint256(1));
         uint256 amount1 = 5_000_000; // 5 USDC
 
-        (uint8 v1, bytes32 r1, bytes32 s1) = _signReceiveAuth(
+        (uint8 v1, bytes32 r1, bytes32 s1) = _signTransferAuth(
             userKey, user, address(facilitator), amount1, 0, type(uint256).max, nonce1
         );
 
@@ -269,7 +269,7 @@ contract SuperfluidFacilitatorForkTest is Test {
         bytes32 nonce2 = bytes32(uint256(2));
         uint256 amount2 = 3_000_000; // 3 USDC
 
-        (uint8 v2, bytes32 r2, bytes32 s2) = _signReceiveAuth(
+        (uint8 v2, bytes32 r2, bytes32 s2) = _signTransferAuth(
             userKey, user, address(facilitator), amount2, 0, type(uint256).max, nonce2
         );
 
@@ -297,7 +297,7 @@ contract SuperfluidFacilitatorForkTest is Test {
         uint256 totalValue = 5_000_000;
         bytes32 nonce = bytes32(uint256(99));
 
-        (uint8 v, bytes32 r, bytes32 s) = _signReceiveAuth(
+        (uint8 v, bytes32 r, bytes32 s) = _signTransferAuth(
             userKey, user, address(facilitator), totalValue, 0, type(uint256).max, nonce
         );
 
@@ -323,7 +323,7 @@ contract SuperfluidFacilitatorForkTest is Test {
 
         // Sign with wrong key
         (, uint256 wrongKey) = makeAddrAndKey("wrong");
-        (uint8 v, bytes32 r, bytes32 s) = _signReceiveAuth(
+        (uint8 v, bytes32 r, bytes32 s) = _signTransferAuth(
             wrongKey, user, address(facilitator), totalValue, 0, type(uint256).max, nonce
         );
 
@@ -369,7 +369,7 @@ contract SuperfluidFacilitatorForkTest is Test {
         );
 
         // Sign the authorization (verified by real USDC)
-        (uint8 v, bytes32 r, bytes32 s) = _signReceiveAuth(
+        (uint8 v, bytes32 r, bytes32 s) = _signTransferAuth(
             userKey, user, address(facilitator), totalValue, 0, type(uint256).max, nonce
         );
 
@@ -412,7 +412,7 @@ contract SuperfluidFacilitatorForkTest is Test {
         // Do NOT mock CFA forwarder — stream creation should fail
         // (CFA forwarder can't operate on mock USDCx without full Superfluid protocol)
 
-        (uint8 v, bytes32 r, bytes32 s) = _signReceiveAuth(
+        (uint8 v, bytes32 r, bytes32 s) = _signTransferAuth(
             userKey, user, address(facilitator), totalValue, 0, type(uint256).max, nonce
         );
 
@@ -439,7 +439,7 @@ contract SuperfluidFacilitatorForkTest is Test {
         uint256 totalValue = 10_000_000;
         bytes32 nonce = bytes32(uint256(300));
 
-        (uint8 v, bytes32 r, bytes32 s) = _signReceiveAuth(
+        (uint8 v, bytes32 r, bytes32 s) = _signTransferAuth(
             userKey, user, address(facilitator), totalValue, 0, type(uint256).max, nonce
         );
 
