@@ -157,6 +157,7 @@ export default function VeniceChatPage() {
   // Balance state
   const [usdcBalance, setUsdcBalance] = useState<bigint | null>(null);
   const [usdcxBalance, setUsdcxBalance] = useState<bigint | null>(null);
+  const [hasUsdcxAllowance, setHasUsdcxAllowance] = useState(false);
   const [subscribingWithUsdcx, setSubscribingWithUsdcx] = useState(false);
 
   // Auth state - cached signature for API requests
@@ -281,6 +282,30 @@ export default function VeniceChatPage() {
         ]);
         setUsdcBalance(usdcBal);
         setUsdcxBalance(usdcxBal);
+
+        // Check USDCx allowance to facilitator (for fee collection)
+        if (facilitatorAddress) {
+          const allowanceAbi = [{
+            name: "allowance",
+            type: "function" as const,
+            stateMutability: "view" as const,
+            inputs: [
+              { name: "owner", type: "address" as const },
+              { name: "spender", type: "address" as const },
+            ],
+            outputs: [{ name: "", type: "uint256" as const }],
+          }] as const;
+
+          const usdcxAllowance = await publicClient.readContract({
+            address: SUPER_TOKEN_CONFIG.superToken.address as `0x${string}`,
+            abi: allowanceAbi,
+            functionName: "allowance",
+            args: [address, facilitatorAddress as `0x${string}`],
+          }) as bigint;
+
+          // Need at least 1 USDCx allowance for fee
+          setHasUsdcxAllowance(usdcxAllowance >= BigInt("1000000000000000000"));
+        }
 
         if (flowRate > BigInt(0)) {
           setSubscriptionStatus("active");
@@ -416,12 +441,68 @@ export default function VeniceChatPage() {
     }
   };
 
+  const approveUsdcxOnly = async () => {
+    if (!address || !walletClient || !facilitatorAddress) return;
+
+    setError(null);
+    setSubscriptionStatus("subscribing");
+
+    try {
+      const publicClient = createPublicClient({ chain: base, transport: http() });
+      if (!walletClient.account) throw new Error("No account available in wallet client");
+
+      const approveAbi = [{
+        name: "approve",
+        type: "function" as const,
+        stateMutability: "nonpayable" as const,
+        inputs: [
+          { name: "spender", type: "address" as const },
+          { name: "amount", type: "uint256" as const },
+        ],
+        outputs: [{ name: "", type: "bool" as const }],
+      }] as const;
+
+      const hash = await walletClient.writeContract({
+        account: walletClient.account,
+        chain: base,
+        address: SUPER_TOKEN_CONFIG.superToken.address as `0x${string}`,
+        abi: approveAbi,
+        functionName: "approve",
+        args: [facilitatorAddress as `0x${string}`, USDCX_FEE_ALLOWANCE],
+      });
+
+      let txHash: `0x${string}`;
+      if (typeof hash === "string") {
+        const cleanHash = hash.trim().startsWith("0x") ? hash.trim() : `0x${hash.trim()}`;
+        const hexPart = cleanHash.slice(2);
+        txHash = `0x${hexPart.length % 2 === 0 ? hexPart : `0${hexPart}`}` as `0x${string}`;
+      } else {
+        txHash = `0x${String(hash).padStart(64, "0")}` as `0x${string}`;
+      }
+
+      await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 120_000 });
+      setHasUsdcxAllowance(true);
+
+      await startSubscription();
+    } catch (error: any) {
+      console.error("Failed to approve USDCx:", error);
+      setError(`Failed to approve USDCx: ${error?.message || error}`);
+      setSubscriptionStatus("inactive");
+    }
+  };
+
   const handleSubscribe = async () => {
     const hasUsdcx = usdcxBalance !== null && usdcxBalance >= BigInt("1000000000000000000");
     setSubscribingWithUsdcx(hasUsdcx);
+
     if (!aclGranted) {
+      // No ACL → batched grant (ACL + USDCx approve in one tx)
       await grantAclPermissions();
+    } else if (hasUsdcx && !hasUsdcxAllowance) {
+      // ACL granted but no USDCx allowance → just approve
+      await approveUsdcxOnly();
     } else {
+      // All permissions in place → start subscription
       await startSubscription();
     }
   };
@@ -629,7 +710,7 @@ export default function VeniceChatPage() {
                                   onClick={handleSubscribe}
                                   disabled={!walletClient}
                                 >
-                                  {!aclGranted ? "Grant Permissions & Start Stream" : "Start Stream"}
+                                  {!aclGranted ? "Grant Permissions & Start Stream" : !hasUsdcxAllowance ? "Approve Fee & Start Stream" : "Start Stream"}
                                 </button>
                               </>
                             ) : hasEnoughUsdc ? (
