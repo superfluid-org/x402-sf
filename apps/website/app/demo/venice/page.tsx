@@ -115,6 +115,7 @@ export default function VeniceChatPage() {
   // Balance state
   const [usdcBalance, setUsdcBalance] = useState<bigint | null>(null);
   const [usdcxBalance, setUsdcxBalance] = useState<bigint | null>(null);
+  const [subscribingWithUsdcx, setSubscribingWithUsdcx] = useState(false);
 
   // Auth state - cached signature for API requests
   const [authPayload, setAuthPayload] = useState<AuthPayload | null>(null);
@@ -351,6 +352,8 @@ export default function VeniceChatPage() {
   };
 
   const handleSubscribe = async () => {
+    const hasUsdcx = usdcxBalance !== null && usdcxBalance >= BigInt("1000000000000000000");
+    setSubscribingWithUsdcx(hasUsdcx);
     if (!aclGranted) {
       await grantAclPermissions();
     } else {
@@ -530,7 +533,10 @@ export default function VeniceChatPage() {
                       ) : subscriptionStatus === "subscribing" ? (
                         <>
                           <h3>Setting Up Subscription...</h3>
-                          <p>Please approve the transactions in your wallet</p>
+                          <p>{subscribingWithUsdcx && aclGranted
+                            ? "Starting your stream, this may take a moment"
+                            : "Please approve the transactions in your wallet"
+                          }</p>
                           <div className="loading-spinner" style={{ margin: "0 auto" }} />
                         </>
                       ) : (() => {
@@ -549,8 +555,8 @@ export default function VeniceChatPage() {
                             {hasEnoughUsdcx ? (
                               <>
                                 <p>
-                                  You already have <strong>{formatUnits(usdcxBalance ?? BigInt(0), 18)} USDCx</strong>.<br />
-                                  Start streaming 1 USDCx/month to the Superfluid DAO.
+                                  You have <strong>{Number(formatUnits(usdcxBalance ?? BigInt(0), 18)).toFixed(2)} USDCx</strong>.<br />
+                                  1 USDCx will be used as a deposit and a 1 USDCx/month stream will start to the Superfluid DAO.
                                 </p>
                                 <button
                                   type="button"
