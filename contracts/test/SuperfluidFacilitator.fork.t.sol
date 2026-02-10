@@ -239,7 +239,7 @@ contract SuperfluidFacilitatorForkTest is Test {
         assertEq(usdcxBalance, expectedUsdcxBalance);
 
         // Verify: deposit tracked
-        assertEq(facilitator.userDeposits(user), expectedFee);
+        assertEq(facilitator.userPaidFees(user), expectedFee);
         assertEq(facilitator.totalFeesAccumulated(), expectedFee);
         assertEq(facilitator.totalPaymentsProcessed(), 1);
 
@@ -285,7 +285,7 @@ contract SuperfluidFacilitatorForkTest is Test {
 
         (, uint256 fee1) = facilitator.calculateFeeBreakdown(amount1);
         (, uint256 fee2) = facilitator.calculateFeeBreakdown(amount2);
-        assertEq(facilitator.userDeposits(user), fee1 + fee2);
+        assertEq(facilitator.userPaidFees(user), fee1 + fee2);
 
         // Verify cumulative USDCx balance
         (uint256 wrap1,) = facilitator.calculateFeeBreakdown(amount1);

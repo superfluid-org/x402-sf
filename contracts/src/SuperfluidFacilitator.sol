@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -17,11 +17,11 @@ import {ICFAv1Forwarder} from "./interfaces/ICFAv1Forwarder.sol";
 /// @dev    Uses transferWithAuthorization to match the EIP-712 type hash
 ///         signed by x402-axios clients (TransferWithAuthorization).
 ///
-///         Security model:
-///         - Owner (cold wallet / multisig): admin functions, treasury withdrawal
-///         - Operator (server hot wallet): can only call processPayment with valid signatures
-///         - Contract holds accumulated fees; only owner can withdraw to treasury
-contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
+///         Security model (AccessControl):
+///         - DEFAULT_ADMIN_ROLE (cold wallet / multisig): admin functions, treasury withdrawal
+///         - OPERATOR_ROLE (server hot wallet): can only call processPayment with valid signatures
+///         - Contract holds accumulated fees; only admin can withdraw to treasury
+contract SuperfluidFacilitator is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ──────────────────────────────────────────────
@@ -39,10 +39,15 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
     }
 
     // ──────────────────────────────────────────────
+    // Roles
+    // ──────────────────────────────────────────────
+
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+
+    // ──────────────────────────────────────────────
     // Errors
     // ──────────────────────────────────────────────
 
-    error OnlyOperator();
     error ZeroAddress();
     error InvalidFeeConfig();
     error SenderIsReceiver();
@@ -65,7 +70,6 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
         bool streamCreated
     );
 
-    event OperatorUpdated(address indexed previous, address indexed updated);
     event TreasuryUpdated(address indexed previous, address indexed updated);
     event DefaultRecipientUpdated(address indexed previous, address indexed updated);
     event FeeConfigUpdated(uint256 minFee, uint256 feeBasisPoints);
@@ -89,9 +93,6 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
     // State
     // ──────────────────────────────────────────────
 
-    /// @notice Server hot wallet authorized to call processPayment.
-    address public operator;
-
     /// @notice Address where accumulated fees are withdrawn to.
     address public treasury;
 
@@ -107,8 +108,8 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
     /// @notice Emergency pause flag.
     bool public paused;
 
-    /// @notice Cumulative non-refundable deposits per user (in USDC, 6 decimals).
-    mapping(address => uint256) public userDeposits;
+    /// @notice Cumulative fees paid per user (in USDC, 6 decimals).
+    mapping(address => uint256) public userPaidFees;
 
     /// @notice Running total of fees collected.
     uint256 public totalFeesAccumulated;
@@ -119,11 +120,6 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
     // ──────────────────────────────────────────────
     // Modifiers
     // ──────────────────────────────────────────────
-
-    modifier onlyOperator() {
-        if (msg.sender != operator) revert OnlyOperator();
-        _;
-    }
 
     modifier whenNotPaused() {
         if (paused) revert ContractPaused();
@@ -155,7 +151,8 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
         uint256 _minFee,
         uint256 _feeBasisPoints,
         uint256 _decimalScaleFactor
-    ) Ownable(_owner) {
+    ) {
+        if (_owner == address(0)) revert ZeroAddress();
         if (_operator == address(0)) revert ZeroAddress();
         if (_usdc == address(0)) revert ZeroAddress();
         if (_usdcx == address(0)) revert ZeroAddress();
@@ -164,7 +161,8 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
         if (_feeBasisPoints > 1000) revert InvalidFeeConfig(); // max 10%
         if (_decimalScaleFactor == 0) revert InvalidFeeConfig();
 
-        operator = _operator;
+        _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+        _grantRole(OPERATOR_ROLE, _operator);
         usdc = IERC20WithAuthorization(_usdc);
         usdcx = ISuperToken(_usdcx);
         cfaForwarder = ICFAv1Forwarder(_cfaForwarder);
@@ -195,20 +193,17 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
         AuthParams calldata auth,
         address recipient,
         int96 flowRate
-    ) external onlyOperator whenNotPaused nonReentrant {
+    ) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant {
         if (from == address(0)) revert ZeroAddress();
 
         address resolvedRecipient = recipient == address(0) ? defaultRecipient : recipient;
-
-        if (flowRate > 0 && resolvedRecipient != address(0)) {
-            if (from == resolvedRecipient) revert SenderIsReceiver();
-        }
+        if (from == resolvedRecipient) revert SenderIsReceiver();
 
         // Pull USDC, wrap to USDCx, track fees
         (uint256 amountToWrap, uint256 fee) = _pullAndWrap(from, value, auth);
 
         // Create stream if requested
-        bool streamCreated = false;
+        bool streamCreated;
         if (flowRate > 0 && resolvedRecipient != address(0)) {
             streamCreated = _createStream(from, resolvedRecipient, flowRate);
         }
@@ -216,12 +211,13 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
         emit PaymentProcessed(from, resolvedRecipient, value, amountToWrap, fee, flowRate, streamCreated);
     }
 
-    /// @notice Wrap-only variant (no stream creation).
+    /// @notice Pull USDC via EIP-3009, deduct fee, wrap remainder to USDCx, and
+    ///         send USDCx back to the sender. No stream is created.
     function processPaymentWrapOnly(
         address from,
         uint256 value,
         AuthParams calldata auth
-    ) external onlyOperator whenNotPaused nonReentrant {
+    ) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant {
         if (from == address(0)) revert ZeroAddress();
 
         (uint256 amountToWrap, uint256 fee) = _pullAndWrap(from, value, auth);
@@ -259,7 +255,7 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
         usdcx.upgradeTo(from, amountToWrap * decimalScaleFactor, "");
 
         // Track deposit and fees
-        userDeposits[from] += fee;
+        userPaidFees[from] += fee;
         totalFeesAccumulated += fee;
         totalPaymentsProcessed += 1;
     }
@@ -300,25 +296,15 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
             return (0, totalValue);
         }
 
-        // If no percentage fee, just use flat minFee
         if (feeBasisPoints == 0) {
-            fee = minFee;
-            amountToWrap = totalValue - fee;
-            return (amountToWrap, fee);
+            return (totalValue - minFee, minFee);
         }
 
-        // Threshold where percentage fee equals minFee.
-        uint256 thresholdWrap = (minFee * 10000) / feeBasisPoints;
-        uint256 threshold = thresholdWrap + minFee;
-
-        if (totalValue <= threshold) {
+        fee = totalValue * feeBasisPoints / 10_000;
+        if (fee < minFee) {
             fee = minFee;
-            amountToWrap = totalValue - fee;
-        } else {
-            // total = wrap * (10000 + feeBasisPoints) / 10000
-            amountToWrap = (totalValue * 10000) / (10000 + feeBasisPoints);
-            fee = totalValue - amountToWrap;
         }
+        amountToWrap = totalValue - fee;
     }
 
     /// @notice Calculate total required for a desired wrap amount.
@@ -332,9 +318,9 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
         totalRequired = wrapAmount + fee;
     }
 
-    /// @notice Get deposit for a user.
-    function getUserDeposit(address user) external view returns (uint256) {
-        return userDeposits[user];
+    /// @notice Get total fees paid by a user.
+    function getUserPaidFees(address user) external view returns (uint256) {
+        return userPaidFees[user];
     }
 
     /// @notice Get USDC balance held by this contract (accumulated fees).
@@ -356,7 +342,7 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
     // ──────────────────────────────────────────────
 
     /// @notice Withdraw all accumulated USDC fees to treasury.
-    function withdrawFees() external onlyOwner {
+    function withdrawFees() external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 balance = IERC20(address(usdc)).balanceOf(address(this));
         if (balance == 0) revert NothingToWithdraw();
         IERC20(address(usdc)).safeTransfer(treasury, balance);
@@ -364,44 +350,38 @@ contract SuperfluidFacilitator is Ownable, ReentrancyGuard {
     }
 
     /// @notice Withdraw a specific amount of fees to treasury.
-    function withdrawFeesAmount(uint256 amount) external onlyOwner {
+    function withdrawFeesAmount(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (amount == 0) revert NothingToWithdraw();
         IERC20(address(usdc)).safeTransfer(treasury, amount);
         emit FeesWithdrawn(treasury, amount);
     }
 
     /// @notice Rescue any ERC-20 tokens accidentally sent to this contract.
-    function rescueTokens(address token, address to, uint256 amount) external onlyOwner {
+    function rescueTokens(address token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (to == address(0)) revert ZeroAddress();
         IERC20(token).safeTransfer(to, amount);
         emit TokensRescued(token, to, amount);
     }
 
-    function setOperator(address newOperator) external onlyOwner {
-        if (newOperator == address(0)) revert ZeroAddress();
-        emit OperatorUpdated(operator, newOperator);
-        operator = newOperator;
-    }
-
-    function setTreasury(address newTreasury) external onlyOwner {
+    function setTreasury(address newTreasury) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newTreasury == address(0)) revert ZeroAddress();
         emit TreasuryUpdated(treasury, newTreasury);
         treasury = newTreasury;
     }
 
-    function setDefaultRecipient(address newRecipient) external onlyOwner {
+    function setDefaultRecipient(address newRecipient) external onlyRole(DEFAULT_ADMIN_ROLE) {
         emit DefaultRecipientUpdated(defaultRecipient, newRecipient);
         defaultRecipient = newRecipient;
     }
 
-    function setFeeConfig(uint256 _minFee, uint256 _feeBasisPoints) external onlyOwner {
+    function setFeeConfig(uint256 _minFee, uint256 _feeBasisPoints) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (_feeBasisPoints > 1000) revert InvalidFeeConfig();
         minFee = _minFee;
         feeBasisPoints = _feeBasisPoints;
         emit FeeConfigUpdated(_minFee, _feeBasisPoints);
     }
 
-    function setPaused(bool _paused) external onlyOwner {
+    function setPaused(bool _paused) external onlyRole(DEFAULT_ADMIN_ROLE) {
         paused = _paused;
         emit PauseStatusChanged(_paused);
     }

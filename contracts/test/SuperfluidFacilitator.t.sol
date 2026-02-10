@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {SuperfluidFacilitator} from "../src/SuperfluidFacilitator.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // ═══════════════════════════════════════════════════
@@ -238,7 +239,6 @@ contract SuperfluidFacilitatorTest is Test {
         int96 flowRate,
         bool streamCreated
     );
-    event OperatorUpdated(address indexed previous, address indexed updated);
     event FeeConfigUpdated(uint256 minFee, uint256 feeBasisPoints);
 
     // Default EIP-3009 params (mock doesn't validate signatures)
@@ -281,8 +281,8 @@ contract SuperfluidFacilitatorTest is Test {
     // ──────────────────────────────────────────────
 
     function test_constructor_setsState() public view {
-        assertEq(facilitator.owner(), owner);
-        assertEq(facilitator.operator(), operator);
+        assertTrue(facilitator.hasRole(facilitator.DEFAULT_ADMIN_ROLE(), owner));
+        assertTrue(facilitator.hasRole(facilitator.OPERATOR_ROLE(), operator));
         assertEq(address(facilitator.usdc()), address(usdc));
         assertEq(address(facilitator.usdcx()), address(usdcx));
         assertEq(address(facilitator.cfaForwarder()), address(cfaForwarder));
@@ -296,6 +296,14 @@ contract SuperfluidFacilitatorTest is Test {
     function test_constructor_approvesUsdcToUsdcx() public view {
         uint256 allowance = usdc.allowance(address(facilitator), address(usdcx));
         assertEq(allowance, type(uint256).max);
+    }
+
+    function test_constructor_revertsOnZeroOwner() public {
+        vm.expectRevert(SuperfluidFacilitator.ZeroAddress.selector);
+        new SuperfluidFacilitator(
+            address(0), operator, address(usdc), address(usdcx),
+            address(cfaForwarder), treasury, defaultRecipient, MIN_FEE, FEE_BASIS_POINTS, 1
+        );
     }
 
     function test_constructor_revertsOnZeroOperator() public {
@@ -389,13 +397,12 @@ contract SuperfluidFacilitatorTest is Test {
 
     function test_calculateFeeBreakdown_percentageFeeRegion() public view {
         // Large amount: percentage fee > minFee
-        // threshold = (100000 * 10000) / 10 + 100000 = 100_100_000 ≈ 100.1 USDC
         uint256 totalValue = 200_000_000; // 200 USDC
         (uint256 wrap, uint256 fee) = facilitator.calculateFeeBreakdown(totalValue);
 
-        // wrap = (200_000_000 * 10000) / 10010 = 199_800_199
-        uint256 expectedWrap = (totalValue * 10000) / (10000 + FEE_BASIS_POINTS);
-        uint256 expectedFee = totalValue - expectedWrap;
+        // fee = 200_000_000 * 10 / 10_000 = 200_000
+        uint256 expectedFee = totalValue * FEE_BASIS_POINTS / 10_000;
+        uint256 expectedWrap = totalValue - expectedFee;
 
         assertEq(wrap, expectedWrap);
         assertEq(fee, expectedFee);
@@ -404,18 +411,17 @@ contract SuperfluidFacilitatorTest is Test {
     }
 
     function test_calculateFeeBreakdown_atThreshold() public view {
-        // At the exact threshold boundary
-        // thresholdWrap = (100000 * 10000) / 10 = 100_000_000
-        // threshold = 100_000_000 + 100_000 = 100_100_000
-        uint256 threshold = 100_100_000;
+        // At the boundary where percentage fee equals minFee:
+        // minFee * 10_000 / feeBasisPoints = 100_000 * 10_000 / 10 = 100_000_000
+        uint256 threshold = 100_000_000;
         (uint256 wrap, uint256 fee) = facilitator.calculateFeeBreakdown(threshold);
+        // fee = 100_000_000 * 10 / 10_000 = 100_000 == minFee
         assertEq(fee, MIN_FEE);
         assertEq(wrap, threshold - MIN_FEE);
     }
 
     function test_calculateFeeBreakdown_zeroBasisPoints() public {
         // Test flat fee mode (feeBasisPoints = 0)
-        // This was causing overflow before the fix: type(uint256).max + minFee
         uint256 flatFee = 1_000_000; // 1 USDC flat fee
 
         vm.prank(owner);
@@ -478,8 +484,8 @@ contract SuperfluidFacilitatorTest is Test {
         assertEq(usdc.balanceOf(address(facilitator)), expectedFee);
         // USDCx sent to user (via mock)
         assertEq(usdcx.balanceOf(user), expectedWrap);
-        // Deposit tracked
-        assertEq(facilitator.userDeposits(user), expectedFee);
+        // Fees tracked
+        assertEq(facilitator.userPaidFees(user), expectedFee);
         // Counters updated
         assertEq(facilitator.totalFeesAccumulated(), expectedFee);
         assertEq(facilitator.totalPaymentsProcessed(), 1);
@@ -540,7 +546,13 @@ contract SuperfluidFacilitatorTest is Test {
         uint256 totalValue = 10_000_000;
         _mintAndPrepare(user, totalValue);
 
-        vm.expectRevert(SuperfluidFacilitator.OnlyOperator.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                user,
+                facilitator.OPERATOR_ROLE()
+            )
+        );
         vm.prank(user);
         facilitator.processPayment(
             user, totalValue, _defaultAuth(),
@@ -581,6 +593,18 @@ contract SuperfluidFacilitatorTest is Test {
         facilitator.processPayment(
             user, totalValue, _defaultAuth(),
             user, int96(100) // sender == recipient
+        );
+    }
+
+    function test_processPayment_revertsOnSenderIsReceiver_evenWithZeroFlowRate() public {
+        uint256 totalValue = 10_000_000;
+        _mintAndPrepare(user, totalValue);
+
+        vm.expectRevert(SuperfluidFacilitator.SenderIsReceiver.selector);
+        vm.prank(operator);
+        facilitator.processPayment(
+            user, totalValue, _defaultAuth(),
+            user, int96(0) // sender == recipient, even with flowRate=0
         );
     }
 
@@ -655,7 +679,7 @@ contract SuperfluidFacilitatorTest is Test {
             recipient, int96(0)
         );
 
-        assertEq(facilitator.userDeposits(user), fee1 + fee2);
+        assertEq(facilitator.userPaidFees(user), fee1 + fee2);
         assertEq(facilitator.totalFeesAccumulated(), fee1 + fee2);
         assertEq(facilitator.totalPaymentsProcessed(), 2);
     }
@@ -678,13 +702,19 @@ contract SuperfluidFacilitatorTest is Test {
         assertEq(usdc.balanceOf(user), 0);
         assertEq(usdc.balanceOf(address(facilitator)), expectedFee);
         assertEq(usdcx.balanceOf(user), expectedWrap);
-        assertEq(facilitator.userDeposits(user), expectedFee);
+        assertEq(facilitator.userPaidFees(user), expectedFee);
         // No stream
         assertEq(cfaForwarder.lastSender(), address(0));
     }
 
     function test_processPaymentWrapOnly_revertsForNonOperator() public {
-        vm.expectRevert(SuperfluidFacilitator.OnlyOperator.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                user,
+                facilitator.OPERATOR_ROLE()
+            )
+        );
         vm.prank(user);
         facilitator.processPaymentWrapOnly(
             user, 10_000_000, _defaultAuth()
@@ -703,7 +733,7 @@ contract SuperfluidFacilitatorTest is Test {
     // View helpers
     // ──────────────────────────────────────────────
 
-    function test_getUserDeposit() public {
+    function test_getUserPaidFees() public {
         uint256 totalValue = 10_000_000;
         _mintAndPrepare(user, totalValue);
 
@@ -714,7 +744,7 @@ contract SuperfluidFacilitatorTest is Test {
         );
 
         (, uint256 fee) = facilitator.calculateFeeBreakdown(totalValue);
-        assertEq(facilitator.getUserDeposit(user), fee);
+        assertEq(facilitator.getUserPaidFees(user), fee);
     }
 
     function test_getAccumulatedFees() public {
@@ -775,7 +805,7 @@ contract SuperfluidFacilitatorTest is Test {
         facilitator.withdrawFees();
     }
 
-    function test_withdrawFees_revertsForNonOwner() public {
+    function test_withdrawFees_revertsForNonAdmin() public {
         vm.expectRevert();
         vm.prank(operator);
         facilitator.withdrawFees();
@@ -822,28 +852,35 @@ contract SuperfluidFacilitatorTest is Test {
         facilitator.rescueTokens(address(usdc), address(0), 1_000_000);
     }
 
-    function test_setOperator() public {
+    // ──────────────────────────────────────────────
+    // AccessControl: role management
+    // ──────────────────────────────────────────────
+
+    function test_grantOperatorRole() public {
         address newOp = makeAddr("newOperator");
-
-        vm.expectEmit(true, true, false, false);
-        emit OperatorUpdated(operator, newOp);
+        bytes32 opRole = facilitator.OPERATOR_ROLE();
 
         vm.prank(owner);
-        facilitator.setOperator(newOp);
+        facilitator.grantRole(opRole, newOp);
 
-        assertEq(facilitator.operator(), newOp);
+        assertTrue(facilitator.hasRole(opRole, newOp));
     }
 
-    function test_setOperator_revertsOnZero() public {
-        vm.expectRevert(SuperfluidFacilitator.ZeroAddress.selector);
+    function test_revokeOperatorRole() public {
+        bytes32 opRole = facilitator.OPERATOR_ROLE();
+
         vm.prank(owner);
-        facilitator.setOperator(address(0));
+        facilitator.revokeRole(opRole, operator);
+
+        assertFalse(facilitator.hasRole(opRole, operator));
     }
 
-    function test_setOperator_revertsForNonOwner() public {
+    function test_grantRole_revertsForNonAdmin() public {
+        bytes32 opRole = facilitator.OPERATOR_ROLE();
+
         vm.expectRevert();
         vm.prank(operator);
-        facilitator.setOperator(makeAddr("x"));
+        facilitator.grantRole(opRole, makeAddr("x"));
     }
 
     function test_setTreasury() public {
@@ -903,7 +940,7 @@ contract SuperfluidFacilitatorTest is Test {
         assertEq(facilitator.paused(), false);
     }
 
-    function test_setPaused_revertsForNonOwner() public {
+    function test_setPaused_revertsForNonAdmin() public {
         vm.expectRevert();
         vm.prank(operator);
         facilitator.setPaused(true);

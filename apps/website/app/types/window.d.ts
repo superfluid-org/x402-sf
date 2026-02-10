@@ -14,12 +14,11 @@ declare global {
   interface Window {
     ethereum?: EthereumProvider;
   }
+}
 
+declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
-      /**
-       * The AppKit button web component. Registered globally by AppKit.
-       */
       "appkit-button": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
     }
   }
