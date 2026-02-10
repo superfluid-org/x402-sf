@@ -112,6 +112,10 @@ export default function VeniceChatPage() {
   const [facilitatorAddress, setFacilitatorAddress] = useState<string | null>(null);
   const [streamFlowRate, setStreamFlowRate] = useState<bigint>(BigInt(0));
 
+  // Balance state
+  const [usdcBalance, setUsdcBalance] = useState<bigint | null>(null);
+  const [usdcxBalance, setUsdcxBalance] = useState<bigint | null>(null);
+
   // Auth state - cached signature for API requests
   const [authPayload, setAuthPayload] = useState<AuthPayload | null>(null);
 
@@ -208,6 +212,32 @@ export default function VeniceChatPage() {
 
         const [, flowRate] = flowResult;
         setStreamFlowRate(flowRate);
+
+        // Fetch USDC and USDCx balances
+        const balanceOfAbi = [{
+          name: "balanceOf",
+          type: "function" as const,
+          stateMutability: "view" as const,
+          inputs: [{ name: "account", type: "address" as const }],
+          outputs: [{ name: "balance", type: "uint256" as const }],
+        }] as const;
+
+        const [usdcBal, usdcxBal] = await Promise.all([
+          publicClient.readContract({
+            address: SUPER_TOKEN_CONFIG.underlyingToken.address as `0x${string}`,
+            abi: balanceOfAbi,
+            functionName: "balanceOf",
+            args: [address],
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: SUPER_TOKEN_CONFIG.superToken.address as `0x${string}`,
+            abi: balanceOfAbi,
+            functionName: "balanceOf",
+            args: [address],
+          }) as Promise<bigint>,
+        ]);
+        setUsdcBalance(usdcBal);
+        setUsdcxBalance(usdcxBal);
 
         if (flowRate > BigInt(0)) {
           setSubscriptionStatus("active");
@@ -503,23 +533,69 @@ export default function VeniceChatPage() {
                           <p>Please approve the transactions in your wallet</p>
                           <div className="loading-spinner" style={{ margin: "0 auto" }} />
                         </>
-                      ) : (
-                        <>
-                          <h3>Subscribe to Access</h3>
-                          <p>
-                            Only <strong>1 USDCx/month</strong> + 1 USDCx deposit.<br />
-                            Your subscription streams directly to the Superfluid DAO.
-                          </p>
-                          <button
-                            type="button"
-                            className="subscribe-btn"
-                            onClick={handleSubscribe}
-                            disabled={!walletClient}
-                          >
-                            {!aclGranted ? "Grant Permissions & Subscribe" : "Subscribe Now"}
-                          </button>
-                        </>
-                      )}
+                      ) : (() => {
+                        // Check if user has enough balance to subscribe
+                        // Need either 1 USDCx (1e18) or 2 USDC (2e6 = 1 USDC wrap + 1 USDC fee)
+                        const MIN_USDCX = BigInt("1000000000000000000"); // 1 USDCx (18 decimals)
+                        const MIN_USDC = BigInt("2000000"); // 2 USDC (6 decimals)
+                        const hasEnoughUsdcx = usdcxBalance !== null && usdcxBalance >= MIN_USDCX;
+                        const hasEnoughUsdc = usdcBalance !== null && usdcBalance >= MIN_USDC;
+                        const balancesLoaded = usdcBalance !== null && usdcxBalance !== null;
+                        const hasEnough = !balancesLoaded || hasEnoughUsdcx || hasEnoughUsdc;
+
+                        return (
+                          <>
+                            <h3>Subscribe to Access</h3>
+                            {hasEnoughUsdcx ? (
+                              <>
+                                <p>
+                                  You already have <strong>{formatUnits(usdcxBalance ?? BigInt(0), 18)} USDCx</strong>.<br />
+                                  Start streaming 1 USDCx/month to the Superfluid DAO.
+                                </p>
+                                <button
+                                  type="button"
+                                  className="subscribe-btn"
+                                  onClick={handleSubscribe}
+                                  disabled={!walletClient}
+                                >
+                                  {!aclGranted ? "Grant Permissions & Start Stream" : "Start Stream"}
+                                </button>
+                              </>
+                            ) : hasEnoughUsdc ? (
+                              <>
+                                <p>
+                                  Only <strong>1 USDCx/month</strong> + 1 USDCx deposit.<br />
+                                  Your subscription streams directly to the Superfluid DAO.
+                                </p>
+                                <button
+                                  type="button"
+                                  className="subscribe-btn"
+                                  onClick={handleSubscribe}
+                                  disabled={!walletClient}
+                                >
+                                  {!aclGranted ? "Grant Permissions & Subscribe" : "Subscribe Now"}
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <p>
+                                  You need at least <strong>2 USDC</strong> on Base to subscribe.<br />
+                                  Your balance: {formatUnits(usdcBalance ?? BigInt(0), 6)} USDC, {formatUnits(usdcxBalance ?? BigInt(0), 18)} USDCx
+                                </p>
+                                <a
+                                  href={`https://app.uniswap.org/swap?outputCurrency=${SUPER_TOKEN_CONFIG.underlyingToken.address}&chain=base`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="subscribe-btn"
+                                  style={{ display: "inline-block", textAlign: "center", textDecoration: "none" }}
+                                >
+                                  Get USDC on Uniswap
+                                </a>
+                              </>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}

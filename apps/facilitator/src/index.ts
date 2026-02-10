@@ -397,11 +397,7 @@ app.get("/resource", async (c) => {
   // Get stream configuration from query params (optional monthly amount)
   const monthlyAmountParam = c.req.query("monthlyAmount"); // in USDC
 
-  const host = c.req.header("host") ?? `localhost:${port}`;
-  const protocol = c.req.header("x-forwarded-proto") ?? "http";
-  const resourceUrl = `${protocol}://${host}${c.req.path}`;
-
-  // Parse monthly amount (default to 1 USDC/month if not specified)
+  // Parse monthly amount early (needed for USDCx balance check and 402 response)
   let monthlyAmountUSDC = 1000000n; // 1 USDC (6 decimals) default
   if (monthlyAmountParam) {
     try {
@@ -416,13 +412,75 @@ app.get("/resource", async (c) => {
     return c.json({ error: "Cannot create stream to yourself" }, 400);
   }
 
-  const desiredWrapAmount = monthlyAmountUSDC; 
-  const fee = calculateFee(desiredWrapAmount);
-  const totalRequired = desiredWrapAmount + fee;
-  
   const decimalDiff = SUPER_TOKEN_CONFIG.superToken.decimals - SUPER_TOKEN_CONFIG.underlyingToken.decimals;
   const monthlyAmountSuper = monthlyAmountUSDC * (10n ** BigInt(decimalDiff));
   const streamFlowRate = calculateFlowRate(monthlyAmountSuper);
+
+  // Check if user already has enough USDCx to start streaming without wrapping
+  const operatorAddress = contractAddress ?? facilitatorAddress;
+  try {
+    const { superTokenBalance } = await getWrapPreflight(publicClient, accountChecksum);
+    if (superTokenBalance >= monthlyAmountSuper) {
+      // User has enough USDCx — check if they granted ACL permissions
+      const { hasPermissions } = await checkFlowPermissions(
+        publicClient as any,
+        accountChecksum,
+        operatorAddress,
+      );
+
+      if (hasPermissions) {
+        console.log("ℹ️ [/resource] User has sufficient USDCx, creating stream directly", {
+          account: accountChecksum,
+          recipient: recipientAddress,
+          superTokenBalance: superTokenBalance.toString(),
+          requiredSuper: monthlyAmountSuper.toString(),
+        });
+
+        try {
+          const streamTxHash = await createFlow(
+            walletClient,
+            accountChecksum,
+            recipientAddress,
+            streamFlowRate,
+          );
+          await publicClient.waitForTransactionReceipt({ hash: streamTxHash });
+
+          console.log("✅ [/resource] Stream created from existing USDCx balance", {
+            account: accountChecksum,
+            recipient: recipientAddress,
+            flowRate: streamFlowRate.toString(),
+            txHash: streamTxHash,
+          });
+
+          return c.json({
+            status: "ok",
+            account: accountChecksum,
+            flowRate: streamFlowRate.toString(),
+            recipient: recipientAddress,
+            message: `Access granted! Stream created using your existing USDCx balance`,
+            streamCreated: true,
+            streamTxHash,
+            imageUrl: "https://i.imgur.com/k2tPAGC.jpeg",
+          });
+        } catch (streamError) {
+          console.warn("⚠️ [/resource] Auto-stream creation failed, falling back to 402", {
+            error: `${streamError}`,
+          });
+          // Fall through to 402 response
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("⚠️ [/resource] USDCx balance check failed, falling back to 402", { error: `${err}` });
+  }
+
+  const host = c.req.header("host") ?? `localhost:${port}`;
+  const protocol = c.req.header("x-forwarded-proto") ?? "http";
+  const resourceUrl = `${protocol}://${host}${c.req.path}`;
+
+  const desiredWrapAmount = monthlyAmountUSDC;
+  const fee = calculateFee(desiredWrapAmount);
+  const totalRequired = desiredWrapAmount + fee;
 
   const extra: Record<string, any> = {
     name: "USD Coin",
