@@ -38,14 +38,20 @@ export default function Header() {
 
           {/* Right side buttons - Desktop */}
           <div className="hidden md:flex items-center gap-3 absolute right-0">
-            <Link 
-              href="/demo" 
-              className="px-4 py-2 bg-white text-black border-2 border-black hover:bg-gray-50 transition-colors text-sm font-medium"
+            <Link
+              href="/demo"
+              className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 transition-colors text-sm font-medium"
             >
               Demo
             </Link>
-            <a 
-              href="https://docs.google.com/forms/d/e/1FAIpQLSfdxN7dGchn4CNQAF9bJDA4PMWH8D8q3lc_kI4ytddkZ2fsjQ/viewform" 
+            <Link
+              href="/demo/simple"
+              className="px-4 py-2 bg-white text-black border-2 border-black hover:bg-gray-50 transition-colors text-sm font-medium"
+            >
+              Simple Demo
+            </Link>
+            <a
+              href="https://docs.google.com/forms/d/e/1FAIpQLSfdxN7dGchn4CNQAF9bJDA4PMWH8D8q3lc_kI4ytddkZ2fsjQ/viewform"
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-2 bg-black text-white hover:bg-gray-800 transition-colors text-sm font-medium"
@@ -56,14 +62,20 @@ export default function Header() {
 
           {/* Mobile - Demo and Contact buttons */}
           <div className="flex md:hidden items-center gap-2">
-            <Link 
-              href="/demo" 
-              className="px-3 py-1.5 bg-white text-black border-2 border-black hover:bg-gray-50 transition-colors text-xs font-medium"
+            <Link
+              href="/demo"
+              className="px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 transition-colors text-xs font-medium"
             >
               Demo
             </Link>
-            <a 
-              href="https://docs.google.com/forms/d/e/1FAIpQLSfdxN7dGchn4CNQAF9bJDA4PMWH8D8q3lc_kI4ytddkZ2fsjQ/viewform" 
+            <Link
+              href="/demo/simple"
+              className="px-3 py-1.5 bg-white text-black border-2 border-black hover:bg-gray-50 transition-colors text-xs font-medium"
+            >
+              Simple
+            </Link>
+            <a
+              href="https://docs.google.com/forms/d/e/1FAIpQLSfdxN7dGchn4CNQAF9bJDA4PMWH8D8q3lc_kI4ytddkZ2fsjQ/viewform"
               target="_blank"
               rel="noopener noreferrer"
               className="px-3 py-1.5 bg-black text-white hover:bg-gray-800 transition-colors text-xs font-medium"
