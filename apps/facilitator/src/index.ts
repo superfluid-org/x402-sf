@@ -417,15 +417,16 @@ app.get("/resource", async (c) => {
   const streamFlowRate = calculateFlowRate(monthlyAmountSuper);
 
   // Check if user already has enough USDCx to start streaming without wrapping
-  const operatorAddress = contractAddress ?? facilitatorAddress;
+  // Auto-stream uses the EOA (facilitatorAddress) to call setFlowrateFrom and transferFrom,
+  // so ACL and allowance must be checked against the EOA — not the contract.
   try {
     const { superTokenBalance } = await getWrapPreflight(publicClient, accountChecksum);
     if (superTokenBalance >= monthlyAmountSuper) {
-      // User has enough USDCx — check if they granted ACL permissions
+      // User has enough USDCx — check if they granted ACL permissions to the EOA
       const { hasPermissions } = await checkFlowPermissions(
         publicClient as any,
         accountChecksum,
-        operatorAddress,
+        facilitatorAddress,
       );
 
       if (hasPermissions) {

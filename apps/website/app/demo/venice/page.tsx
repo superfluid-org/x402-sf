@@ -152,6 +152,7 @@ export default function VeniceChatPage() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>("inactive");
   const [aclGranted, setAclGranted] = useState(false);
   const [facilitatorAddress, setFacilitatorAddress] = useState<string | null>(null);
+  const [operatorAddress, setOperatorAddress] = useState<string | null>(null);
   const [streamFlowRate, setStreamFlowRate] = useState<bigint>(BigInt(0));
 
   // Balance state
@@ -198,6 +199,9 @@ export default function VeniceChatPage() {
       try {
         const response = await axios.get(`${FACILITATOR_URL}/info`);
         setFacilitatorAddress(response.data.facilitator);
+        // In contract mode, operator is the EOA that calls setFlowrateFrom/transferFrom.
+        // ACL and USDCx approve must target the operator, not the contract.
+        setOperatorAddress(response.data.operator || response.data.facilitator);
       } catch (error) {
         console.error("Failed to fetch facilitator info:", error);
         setSubscriptionStatus("inactive");
@@ -213,7 +217,7 @@ export default function VeniceChatPage() {
       return;
     }
 
-    if (!facilitatorAddress) {
+    if (!facilitatorAddress || !operatorAddress) {
       if (FACILITATOR_URL) {
         setSubscriptionStatus("checking");
       }
@@ -228,6 +232,7 @@ export default function VeniceChatPage() {
           transport: http(),
         });
 
+        // Check ACL against operator (EOA) — the one that calls setFlowrateFrom
         const aclResult = (await publicClient.readContract({
           address: CFA_ADDRESS,
           abi: CFA_ABI,
@@ -235,7 +240,7 @@ export default function VeniceChatPage() {
           args: [
             SUPER_TOKEN_CONFIG.superToken.address,
             address,
-            facilitatorAddress as `0x${string}`,
+            operatorAddress as `0x${string}`,
           ],
         })) as [string, number, bigint];
 
@@ -283,8 +288,8 @@ export default function VeniceChatPage() {
         setUsdcBalance(usdcBal);
         setUsdcxBalance(usdcxBal);
 
-        // Check USDCx allowance to facilitator (for fee collection)
-        if (facilitatorAddress) {
+        // Check USDCx allowance to operator (EOA) for fee collection via transferFrom
+        if (operatorAddress) {
           const allowanceAbi = [{
             name: "allowance",
             type: "function" as const,
@@ -300,7 +305,7 @@ export default function VeniceChatPage() {
             address: SUPER_TOKEN_CONFIG.superToken.address as `0x${string}`,
             abi: allowanceAbi,
             functionName: "allowance",
-            args: [address, facilitatorAddress as `0x${string}`],
+            args: [address, operatorAddress as `0x${string}`],
           }) as bigint;
 
           // Need at least 1 USDCx allowance for fee
@@ -319,7 +324,7 @@ export default function VeniceChatPage() {
     };
 
     checkSubscription();
-  }, [address, isOnBase, facilitatorAddress]);
+  }, [address, isOnBase, facilitatorAddress, operatorAddress]);
 
   // Auto-scroll chat container only (not the whole page)
   useEffect(() => {
@@ -330,7 +335,7 @@ export default function VeniceChatPage() {
   }, [messages, isGeneratingChat]);
 
   const grantAclPermissions = async () => {
-    if (!address || !walletClient || !facilitatorAddress) return;
+    if (!address || !walletClient || !facilitatorAddress || !operatorAddress) return;
 
     setError(null);
     setSubscriptionStatus("subscribing");
@@ -346,19 +351,19 @@ export default function VeniceChatPage() {
       }
 
       // Batch ACL grant + USDCx approve in a single Host.batchCall tx
-      // Operation 1: ERC20_APPROVE (type 1) — approve facilitator to spend USDCx for fee
+      // Operation 1: ERC20_APPROVE (type 1) — approve operator (EOA) to spend USDCx for fee
       const approveData = encodeAbiParameters(
         [{ type: "address" }, { type: "uint256" }],
-        [facilitatorAddress as `0x${string}`, USDCX_FEE_ALLOWANCE],
+        [operatorAddress as `0x${string}`, USDCX_FEE_ALLOWANCE],
       );
 
-      // Operation 2: SUPERFLUID_CALL_AGREEMENT (type 201) — grant CFA ACL permissions
+      // Operation 2: SUPERFLUID_CALL_AGREEMENT (type 201) — grant ACL to operator (EOA)
       const cfaCallData = encodeFunctionData({
         abi: CFA_AGREEMENT_ABI,
         functionName: "updateFlowOperatorPermissions",
         args: [
           SUPER_TOKEN_CONFIG.superToken.address,
-          facilitatorAddress as `0x${string}`,
+          operatorAddress as `0x${string}`,
           7, // permissions: create + update + delete
           ACL_FLOWRATE_ALLOWANCE,
           "0x", // ctx (managed by Host)
@@ -369,18 +374,39 @@ export default function VeniceChatPage() {
         [cfaCallData, "0x"], // callData, userData
       );
 
+      // Build operations array
+      const operations: Array<{ operationType: number; target: `0x${string}`; data: `0x${string}` }> = [
+        { operationType: 1, target: SUPER_TOKEN_CONFIG.superToken.address, data: approveData },
+        { operationType: 201, target: CFA_ADDRESS, data: aclData },
+      ];
+
+      // In contract mode, also grant ACL to the contract (for USDC wrap+stream path)
+      if (operatorAddress !== facilitatorAddress) {
+        const cfaCallDataContract = encodeFunctionData({
+          abi: CFA_AGREEMENT_ABI,
+          functionName: "updateFlowOperatorPermissions",
+          args: [
+            SUPER_TOKEN_CONFIG.superToken.address,
+            facilitatorAddress as `0x${string}`,
+            7,
+            ACL_FLOWRATE_ALLOWANCE,
+            "0x",
+          ],
+        });
+        const aclDataContract = encodeAbiParameters(
+          [{ type: "bytes" }, { type: "bytes" }],
+          [cfaCallDataContract, "0x"],
+        );
+        operations.push({ operationType: 201, target: CFA_ADDRESS, data: aclDataContract });
+      }
+
       const hash = await walletClient.writeContract({
         account: walletClient.account,
         chain: base,
         address: HOST_ADDRESS,
         abi: HOST_ABI,
         functionName: "batchCall",
-        args: [
-          [
-            { operationType: 1, target: SUPER_TOKEN_CONFIG.superToken.address, data: approveData },
-            { operationType: 201, target: CFA_ADDRESS, data: aclData },
-          ],
-        ],
+        args: [operations],
       });
 
       let txHash: `0x${string}`;
@@ -442,7 +468,7 @@ export default function VeniceChatPage() {
   };
 
   const approveUsdcxOnly = async () => {
-    if (!address || !walletClient || !facilitatorAddress) return;
+    if (!address || !walletClient || !operatorAddress) return;
 
     setError(null);
     setSubscriptionStatus("subscribing");
@@ -468,7 +494,7 @@ export default function VeniceChatPage() {
         address: SUPER_TOKEN_CONFIG.superToken.address as `0x${string}`,
         abi: approveAbi,
         functionName: "approve",
-        args: [facilitatorAddress as `0x${string}`, USDCX_FEE_ALLOWANCE],
+        args: [operatorAddress as `0x${string}`, USDCX_FEE_ALLOWANCE],
       });
 
       let txHash: `0x${string}`;
