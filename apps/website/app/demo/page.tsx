@@ -21,7 +21,7 @@ export default function VeniceLandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
-                href="/demo/chat"
+                href="/demo/venice"
                 className="px-8 py-4 bg-black text-white font-semibold border-2 border-black hover:bg-white hover:text-black transition-colors"
               >
                 Launch App
@@ -223,7 +223,7 @@ export default function VeniceLandingPage() {
               Start streaming 1 USDCx/month to the Superfluid DAO and get access to community-powered AI.
             </p>
             <Link
-              href="/demo/chat"
+              href="/demo/venice"
               className="inline-block px-8 py-4 bg-black text-white font-semibold border-2 border-black hover:bg-white hover:text-black transition-colors"
             >
               Launch App

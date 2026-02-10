@@ -22,6 +22,10 @@ const MONTHLY_AMOUNT = BigInt("1000000000000000000"); // 1e18
 const SECONDS_PER_MONTH = BigInt(2628000); // (365/12) * 24 * 60 * 60
 const SUBSCRIPTION_FLOW_RATE = MONTHLY_AMOUNT / SECONDS_PER_MONTH;
 
+// Use a generous ACL allowance (10x monthly rate) to avoid edge cases
+// where the server's flow rate differs slightly or allowance is consumed
+const ACL_FLOWRATE_ALLOWANCE = SUBSCRIPTION_FLOW_RATE * BigInt(10);
+
 // ABIs
 const CFA_FORWARDER_ABI = [
   {
@@ -254,7 +258,7 @@ export default function VeniceChatPage() {
           SUPER_TOKEN_CONFIG.superToken.address,
           facilitatorAddress as `0x${string}`,
           7,  // permissions: create + update + delete
-          SUBSCRIPTION_FLOW_RATE,
+          ACL_FLOWRATE_ALLOWANCE,
         ],
       });
 
@@ -306,7 +310,12 @@ export default function VeniceChatPage() {
       setSubscriptionStatus("active");
     } catch (error: any) {
       console.error("Subscription failed:", error);
-      setError(error?.response?.data?.error || error?.message || "Failed to start subscription");
+      const msg = error?.response?.data?.error || error?.message || "Failed to start subscription";
+      if (msg.includes("StreamCreationFailed") || msg.includes("0x064b4a4a")) {
+        setError("Stream creation failed. Your funds were not charged. Please ensure ACL permissions are granted and try again.");
+      } else {
+        setError(msg);
+      }
       setSubscriptionStatus("inactive");
     }
   };
