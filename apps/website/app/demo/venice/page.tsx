@@ -402,17 +402,21 @@ export default function VeniceChatPage() {
       }
 
       const isCreditsExhausted = error?.response?.data?.veniceCreditsExhausted || error?.response?.status === 503;
+      const isRateLimited = error?.response?.status === 429;
       const errorMsg = isCreditsExhausted
         ? "Venice AI is temporarily out of credits. Please try again later."
         : (error?.response?.data?.error || "Failed to get response");
 
       setError(errorMsg);
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        content: isCreditsExhausted
-          ? "I'm temporarily unavailable — our AI credits have run out. Please try again later!"
-          : "Sorry, I encountered an error. Please try again.",
-      }]);
+
+      let chatBubble = "Sorry, I encountered an error. Please try again.";
+      if (isCreditsExhausted) {
+        chatBubble = "I'm temporarily unavailable — our AI credits have run out. Please try again later!";
+      } else if (isRateLimited) {
+        chatBubble = "You've reached your daily limit of 10 requests. Come back tomorrow!";
+      }
+
+      setMessages(prev => [...prev, { role: "assistant", content: chatBubble }]);
     } finally {
       setIsGeneratingChat(false);
     }
