@@ -21,6 +21,8 @@ export const SUPER_TOKEN_CONFIG = {
     cfaV1Forwarder: "0xcfA132E353cB4E398080B9700609bb008eceB125" as const,
     // CFA contract on Base mainnet
     cfa: "0x19ba78B9cDB05A877718841c574325fdB53601bb" as const,
+    // Superfluid Host on Base mainnet
+    host: "0x4C073B3baB6d8826b8C5b229f3cfdC1eC6E47E74" as const,
   },
 } as const;
 

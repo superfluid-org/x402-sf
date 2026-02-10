@@ -429,44 +429,83 @@ app.get("/resource", async (c) => {
       );
 
       if (hasPermissions) {
-        console.log("ℹ️ [/resource] User has sufficient USDCx, creating stream directly", {
-          account: accountChecksum,
-          recipient: recipientAddress,
-          superTokenBalance: superTokenBalance.toString(),
-          requiredSuper: monthlyAmountSuper.toString(),
-        });
+        // Check USDCx allowance for fee collection
+        const feeAmountSuper = FLAT_FEE * (10n ** BigInt(decimalDiff)); // 1 USDCx (18 decimals)
+        const usdcxAllowance = await (publicClient.readContract({
+          address: SUPER_TOKEN_CONFIG.superToken.address,
+          abi: SUPER_TOKEN_ABI,
+          functionName: "allowance",
+          args: [accountChecksum, facilitatorAddress],
+          authorizationList: undefined,
+        } as any) as Promise<bigint>);
 
-        try {
-          const streamTxHash = await createFlow(
-            walletClient,
-            accountChecksum,
-            recipientAddress,
-            streamFlowRate,
-          );
-          await publicClient.waitForTransactionReceipt({ hash: streamTxHash });
-
-          console.log("✅ [/resource] Stream created from existing USDCx balance", {
+        if (usdcxAllowance < feeAmountSuper) {
+          console.log("ℹ️ [/resource] Insufficient USDCx allowance for fee, falling back to 402", {
+            account: accountChecksum,
+            allowance: usdcxAllowance.toString(),
+            required: feeAmountSuper.toString(),
+          });
+          // Fall through to 402
+        } else {
+          console.log("ℹ️ [/resource] User has sufficient USDCx + allowance, collecting fee and creating stream", {
             account: accountChecksum,
             recipient: recipientAddress,
-            flowRate: streamFlowRate.toString(),
-            txHash: streamTxHash,
+            superTokenBalance: superTokenBalance.toString(),
+            fee: formatUnits(feeAmountSuper, 18),
           });
 
-          return c.json({
-            status: "ok",
-            account: accountChecksum,
-            flowRate: streamFlowRate.toString(),
-            recipient: recipientAddress,
-            message: `Access granted! Stream created using your existing USDCx balance`,
-            streamCreated: true,
-            streamTxHash,
-            imageUrl: "https://i.imgur.com/k2tPAGC.jpeg",
-          });
-        } catch (streamError) {
-          console.warn("⚠️ [/resource] Auto-stream creation failed, falling back to 402", {
-            error: `${streamError}`,
-          });
-          // Fall through to 402 response
+          try {
+            const executedTxs: Hash[] = [];
+
+            // Pull 1 USDCx fee via transferFrom
+            const feeTxHash = await walletClient.writeContract({
+              account: facilitatorAccount,
+              chain: undefined,
+              address: SUPER_TOKEN_CONFIG.superToken.address,
+              abi: SUPER_TOKEN_ABI,
+              functionName: "transferFrom",
+              args: [accountChecksum, facilitatorAddress, feeAmountSuper],
+            });
+            executedTxs.push(feeTxHash);
+            await publicClient.waitForTransactionReceipt({ hash: feeTxHash });
+
+            // Create stream
+            const streamTxHash = await createFlow(
+              walletClient,
+              accountChecksum,
+              recipientAddress,
+              streamFlowRate,
+            );
+            executedTxs.push(streamTxHash);
+            await publicClient.waitForTransactionReceipt({ hash: streamTxHash });
+
+            console.log("✅ [/resource] Fee collected + stream created from existing USDCx", {
+              account: accountChecksum,
+              recipient: recipientAddress,
+              flowRate: streamFlowRate.toString(),
+              fee: formatUnits(feeAmountSuper, 18),
+              feeTxHash,
+              streamTxHash,
+            });
+
+            return c.json({
+              status: "ok",
+              account: accountChecksum,
+              flowRate: streamFlowRate.toString(),
+              recipient: recipientAddress,
+              message: `Access granted! 1 USDCx fee collected and stream created`,
+              streamCreated: true,
+              streamTxHash,
+              transactions: executedTxs,
+              fee: feeAmountSuper.toString(),
+              imageUrl: "https://i.imgur.com/k2tPAGC.jpeg",
+            });
+          } catch (streamError) {
+            console.warn("⚠️ [/resource] Auto-stream creation failed, falling back to 402", {
+              error: `${streamError}`,
+            });
+            // Fall through to 402 response
+          }
         }
       }
     }
@@ -518,7 +557,7 @@ app.get("/resource", async (c) => {
           asset: SUPER_TOKEN_CONFIG.underlyingToken.address,
           payTo: payToAddress,
           resource: resourceUrl,
-          description: `Wrap ${desiredWrapAmount.toString()} USDC & start stream to ${recipientAddress} (${fee.toString()} USDC fee)`,
+          description: `${formatUnits(fee, 6)} USDC fee + wrap ${formatUnits(desiredWrapAmount, 6)} USDC to USDCx & start stream to ${recipientAddress}`,
           mimeType: "application/json",
           maxTimeoutSeconds: 120,
           extra,

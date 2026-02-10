@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { withPaymentInterceptor } from "x402-axios";
 import { useAccount, useWalletClient } from "wagmi";
-import { createPublicClient, http, formatUnits } from "viem";
+import { createPublicClient, http, formatUnits, encodeFunctionData, encodeAbiParameters } from "viem";
 import { base } from "viem/chains";
 import { SUPER_TOKEN_CONFIG } from "../../config/supertoken";
 import Header from "@/components/Header";
@@ -15,6 +15,7 @@ const FACILITATOR_URL = process.env.NEXT_PUBLIC_FACILITATOR_URL;
 const RECIPIENT_ADDRESS = "0xac808840f02c47C05507f48165d2222FF28EF4e1"; // DAO Treasury
 const CFA_FORWARDER_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.cfaV1Forwarder;
 const CFA_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.cfa;
+const HOST_ADDRESS = SUPER_TOKEN_CONFIG.superfluid.host;
 
 // 1 USDCx per month flow rate (18 decimals)
 // Superfluid uses (365/12) days per month = 2628000 seconds
@@ -75,6 +76,47 @@ const CFA_ABI = [
     ],
   },
 ] as const;
+
+// Superfluid Host ABI (batchCall only)
+const HOST_ABI = [
+  {
+    name: "batchCall",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "operations",
+        type: "tuple[]",
+        components: [
+          { name: "operationType", type: "uint32" },
+          { name: "target", type: "address" },
+          { name: "data", type: "bytes" },
+        ],
+      },
+    ],
+    outputs: [],
+  },
+] as const;
+
+// CFA agreement ABI (for encoding batchCall operations)
+const CFA_AGREEMENT_ABI = [
+  {
+    name: "updateFlowOperatorPermissions",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "flowOperator", type: "address" },
+      { name: "permissions", type: "uint8" },
+      { name: "flowRateAllowance", type: "int96" },
+      { name: "ctx", type: "bytes" },
+    ],
+    outputs: [{ name: "newCtx", type: "bytes" }],
+  },
+] as const;
+
+// USDCx approve allowance for fee collection (10 USDCx covers many subscriptions)
+const USDCX_FEE_ALLOWANCE = BigInt("10000000000000000000"); // 10 USDCx
 
 type SubscriptionStatus = "checking" | "active" | "inactive" | "subscribing";
 
@@ -278,18 +320,41 @@ export default function VeniceChatPage() {
         throw new Error("No account available in wallet client");
       }
 
-      // permissions bitmask: 1=create, 2=update, 4=delete, 7=all
-      const hash = await walletClient.writeContract({
-        account: walletClient.account,
-        chain: base,
-        address: CFA_FORWARDER_ADDRESS,
-        abi: CFA_FORWARDER_ABI,
+      // Batch ACL grant + USDCx approve in a single Host.batchCall tx
+      // Operation 1: ERC20_APPROVE (type 1) — approve facilitator to spend USDCx for fee
+      const approveData = encodeAbiParameters(
+        [{ type: "address" }, { type: "uint256" }],
+        [facilitatorAddress as `0x${string}`, USDCX_FEE_ALLOWANCE],
+      );
+
+      // Operation 2: SUPERFLUID_CALL_AGREEMENT (type 201) — grant CFA ACL permissions
+      const cfaCallData = encodeFunctionData({
+        abi: CFA_AGREEMENT_ABI,
         functionName: "updateFlowOperatorPermissions",
         args: [
           SUPER_TOKEN_CONFIG.superToken.address,
           facilitatorAddress as `0x${string}`,
-          7,  // permissions: create + update + delete
+          7, // permissions: create + update + delete
           ACL_FLOWRATE_ALLOWANCE,
+          "0x", // ctx (managed by Host)
+        ],
+      });
+      const aclData = encodeAbiParameters(
+        [{ type: "bytes" }, { type: "bytes" }],
+        [cfaCallData, "0x"], // callData, userData
+      );
+
+      const hash = await walletClient.writeContract({
+        account: walletClient.account,
+        chain: base,
+        address: HOST_ADDRESS,
+        abi: HOST_ABI,
+        functionName: "batchCall",
+        args: [
+          [
+            { operationType: 1, target: SUPER_TOKEN_CONFIG.superToken.address, data: approveData },
+            { operationType: 201, target: CFA_ADDRESS, data: aclData },
+          ],
         ],
       });
 
@@ -556,7 +621,7 @@ export default function VeniceChatPage() {
                               <>
                                 <p>
                                   You have <strong>{Number(formatUnits(usdcxBalance ?? BigInt(0), 18)).toFixed(2)} USDCx</strong>.<br />
-                                  1 USDCx will be used as a deposit and a 1 USDCx/month stream will start to the Superfluid DAO.
+                                  1 USDCx fee + start a 1 USDCx/month stream to the Superfluid DAO.
                                 </p>
                                 <button
                                   type="button"
@@ -570,8 +635,8 @@ export default function VeniceChatPage() {
                             ) : hasEnoughUsdc ? (
                               <>
                                 <p>
-                                  Only <strong>1 USDCx/month</strong> + 1 USDCx deposit.<br />
-                                  Your subscription streams directly to the Superfluid DAO.
+                                  <strong>2 USDC</strong> — 1 USDC fee + wrap 1 USDC to USDCx.<br />
+                                  A 1 USDCx/month stream will start to the Superfluid DAO.
                                 </p>
                                 <button
                                   type="button"
@@ -674,7 +739,7 @@ export default function VeniceChatPage() {
                   1 USDCx <span>/ month</span>
                 </div>
                 <div className="subscription-deposit">
-                  + 1 USDCx initial deposit
+                  + 1 USDC setup fee
                 </div>
                 <div className={`subscription-status ${subscriptionStatus === "active" ? "active" : "inactive"}`}>
                   {subscriptionStatus === "active" ? (
