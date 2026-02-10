@@ -226,12 +226,42 @@ export default function VeniceChatPage() {
 
     const checkSubscription = async () => {
       setSubscriptionStatus("checking");
-      try {
-        const publicClient = createPublicClient({
-          chain: base,
-          transport: http(),
-        });
+      const publicClient = createPublicClient({
+        chain: base,
+        transport: http(),
+      });
 
+      const balanceOfAbi = [{
+        name: "balanceOf",
+        type: "function" as const,
+        stateMutability: "view" as const,
+        inputs: [{ name: "account", type: "address" as const }],
+        outputs: [{ name: "balance", type: "uint256" as const }],
+      }] as const;
+
+      // Always fetch balances first — even if later checks fail
+      try {
+        const [usdcBal, usdcxBal] = await Promise.all([
+          publicClient.readContract({
+            address: SUPER_TOKEN_CONFIG.underlyingToken.address as `0x${string}`,
+            abi: balanceOfAbi,
+            functionName: "balanceOf",
+            args: [address],
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: SUPER_TOKEN_CONFIG.superToken.address as `0x${string}`,
+            abi: balanceOfAbi,
+            functionName: "balanceOf",
+            args: [address],
+          }) as Promise<bigint>,
+        ]);
+        setUsdcBalance(usdcBal);
+        setUsdcxBalance(usdcxBal);
+      } catch (balErr) {
+        console.error("Failed to fetch balances:", balErr);
+      }
+
+      try {
         // Check ACL against operator (EOA) — the one that calls setFlowrateFrom
         const aclResult = (await publicClient.readContract({
           address: CFA_ADDRESS,
@@ -262,55 +292,27 @@ export default function VeniceChatPage() {
         const [, flowRate] = flowResult;
         setStreamFlowRate(flowRate);
 
-        // Fetch USDC and USDCx balances
-        const balanceOfAbi = [{
-          name: "balanceOf",
+        // Check USDCx allowance to operator (EOA) for fee collection via transferFrom
+        const allowanceAbi = [{
+          name: "allowance",
           type: "function" as const,
           stateMutability: "view" as const,
-          inputs: [{ name: "account", type: "address" as const }],
-          outputs: [{ name: "balance", type: "uint256" as const }],
+          inputs: [
+            { name: "owner", type: "address" as const },
+            { name: "spender", type: "address" as const },
+          ],
+          outputs: [{ name: "", type: "uint256" as const }],
         }] as const;
 
-        const [usdcBal, usdcxBal] = await Promise.all([
-          publicClient.readContract({
-            address: SUPER_TOKEN_CONFIG.underlyingToken.address as `0x${string}`,
-            abi: balanceOfAbi,
-            functionName: "balanceOf",
-            args: [address],
-          }) as Promise<bigint>,
-          publicClient.readContract({
-            address: SUPER_TOKEN_CONFIG.superToken.address as `0x${string}`,
-            abi: balanceOfAbi,
-            functionName: "balanceOf",
-            args: [address],
-          }) as Promise<bigint>,
-        ]);
-        setUsdcBalance(usdcBal);
-        setUsdcxBalance(usdcxBal);
+        const usdcxAllowance = await publicClient.readContract({
+          address: SUPER_TOKEN_CONFIG.superToken.address as `0x${string}`,
+          abi: allowanceAbi,
+          functionName: "allowance",
+          args: [address, operatorAddress as `0x${string}`],
+        }) as bigint;
 
-        // Check USDCx allowance to operator (EOA) for fee collection via transferFrom
-        if (operatorAddress) {
-          const allowanceAbi = [{
-            name: "allowance",
-            type: "function" as const,
-            stateMutability: "view" as const,
-            inputs: [
-              { name: "owner", type: "address" as const },
-              { name: "spender", type: "address" as const },
-            ],
-            outputs: [{ name: "", type: "uint256" as const }],
-          }] as const;
-
-          const usdcxAllowance = await publicClient.readContract({
-            address: SUPER_TOKEN_CONFIG.superToken.address as `0x${string}`,
-            abi: allowanceAbi,
-            functionName: "allowance",
-            args: [address, operatorAddress as `0x${string}`],
-          }) as bigint;
-
-          // Need at least 1 USDCx allowance for fee
-          setHasUsdcxAllowance(usdcxAllowance >= BigInt("1000000000000000000"));
-        }
+        // Need at least 1 USDCx allowance for fee
+        setHasUsdcxAllowance(usdcxAllowance >= BigInt("1000000000000000000"));
 
         if (flowRate > BigInt(0)) {
           setSubscriptionStatus("active");
@@ -719,12 +721,16 @@ export default function VeniceChatPage() {
                         const hasEnoughUsdcx = usdcxBalance !== null && usdcxBalance >= MIN_USDCX;
                         const hasEnoughUsdc = usdcBalance !== null && usdcBalance >= MIN_USDC;
                         const balancesLoaded = usdcBalance !== null && usdcxBalance !== null;
-                        const hasEnough = !balancesLoaded || hasEnoughUsdcx || hasEnoughUsdc;
 
                         return (
                           <>
                             <h3>Subscribe to Access</h3>
-                            {hasEnoughUsdcx ? (
+                            {!balancesLoaded ? (
+                              <>
+                                <p>Loading your balance...</p>
+                                <div className="loading-spinner" style={{ margin: "0 auto" }} />
+                              </>
+                            ) : hasEnoughUsdcx ? (
                               <>
                                 <p>
                                   You have <strong>{Number(formatUnits(usdcxBalance ?? BigInt(0), 18)).toFixed(2)} USDCx</strong>.<br />
@@ -758,7 +764,7 @@ export default function VeniceChatPage() {
                               <>
                                 <p>
                                   You need at least <strong>2 USDC</strong> on Base to subscribe.<br />
-                                  Your balance: {formatUnits(usdcBalance ?? BigInt(0), 6)} USDC, {formatUnits(usdcxBalance ?? BigInt(0), 18)} USDCx
+                                  Your balance: {formatUnits(usdcBalance ?? BigInt(0), 6)} USDC, {Number(formatUnits(usdcxBalance ?? BigInt(0), 18)).toFixed(2)} USDCx
                                 </p>
                                 <a
                                   href={`https://app.uniswap.org/swap?outputCurrency=${SUPER_TOKEN_CONFIG.underlyingToken.address}&chain=base`}
