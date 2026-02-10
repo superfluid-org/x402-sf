@@ -4,19 +4,17 @@ const Step: React.FC<{
   number: number;
   title: string;
   description: string;
-  color: string;
   delay: number;
   active: boolean;
-}> = ({ number, title, description, color, delay, active }) => {
+}> = ({ number, title, description, delay, active }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const opacity = interpolate(frame, [delay, delay + 20], [0, 1], {
+  const opacity = interpolate(frame, [delay, delay + 8], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp"
   });
-  const scale = spring({ frame: frame - delay, fps, from: 0.9, to: 1, durationInFrames: 25 });
-  const glow = active ? `0 0 30px ${color}50` : "none";
+  const scale = spring({ frame: frame - delay, fps, from: 0.95, to: 1, durationInFrames: 10 });
 
   return (
     <div
@@ -26,34 +24,31 @@ const Step: React.FC<{
         display: "flex",
         alignItems: "flex-start",
         gap: 24,
-        padding: 24,
-        background: active ? `${color}10` : "rgba(255,255,255,0.02)",
-        border: `2px solid ${active ? color : "rgba(255,255,255,0.1)"}`,
-        borderRadius: 16,
-        boxShadow: glow,
-        transition: "all 0.3s",
+        padding: 28,
+        background: active ? "#f8f8f8" : "white",
+        border: active ? "2px solid black" : "1px solid #e5e5e5",
+        marginBottom: 16,
       }}
     >
       <div
         style={{
-          width: 56,
-          height: 56,
-          borderRadius: "50%",
-          background: active ? color : "rgba(255,255,255,0.1)",
+          width: 48,
+          height: 48,
+          background: active ? "black" : "#f0f0f0",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: 24,
-          fontWeight: 700,
-          color: active ? "white" : "rgba(255,255,255,0.5)",
+          fontSize: 20,
+          fontWeight: 600,
+          color: active ? "white" : "#888",
           flexShrink: 0,
         }}
       >
         {number}
       </div>
       <div>
-        <div style={{ color: "white", fontSize: 24, fontWeight: 600, marginBottom: 8 }}>{title}</div>
-        <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 16, lineHeight: 1.5 }}>
+        <div style={{ color: "black", fontSize: 22, fontWeight: 600, marginBottom: 6 }}>{title}</div>
+        <div style={{ color: "#666", fontSize: 16, lineHeight: 1.5 }}>
           {description}
         </div>
       </div>
@@ -63,10 +58,13 @@ const Step: React.FC<{
 
 export const FlowScene: React.FC = () => {
   const frame = useCurrentFrame();
-  const titleOpacity = interpolate(frame, [0, 20], [0, 1], { extrapolateRight: "clamp" });
+  const { fps } = useVideoConfig();
+
+  const titleOpacity = interpolate(frame, [0, 10], [0, 1], { extrapolateRight: "clamp" });
+  const titleY = spring({ frame, fps, from: 15, to: 0, durationInFrames: 15 });
 
   // Which step is currently active
-  const activeStep = Math.floor(interpolate(frame, [150, 750], [1, 5], {
+  const activeStep = Math.floor(interpolate(frame, [30, 100], [1, 5], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp"
   }));
@@ -74,99 +72,116 @@ export const FlowScene: React.FC = () => {
   return (
     <AbsoluteFill
       style={{
-        background: "linear-gradient(180deg, #0a0a0a 0%, #172554 100%)",
+        background: "#ffffff",
         fontFamily: "system-ui, -apple-system, sans-serif",
-        padding: 60,
+        padding: 80,
       }}
     >
-      {/* Title */}
-      <div style={{ opacity: titleOpacity, marginBottom: 40 }}>
-        <h1 style={{ fontSize: 56, fontWeight: 700, color: "white", margin: 0 }}>
-          User Payment Flow
-        </h1>
-        <p style={{ fontSize: 24, color: "rgba(255,255,255,0.6)", marginTop: 12 }}>
-          From click to streaming - no wallet transaction needed
-        </p>
-      </div>
+      {/* Subtle grid background */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `
+            linear-gradient(rgba(0,0,0,0.02) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,0,0,0.02) 1px, transparent 1px)
+          `,
+          backgroundSize: "60px 60px",
+        }}
+      />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        <Step
-          number={1}
-          title="Connect Wallet & Grant ACL"
-          description="One-time: Allow facilitator contract to create streams on your behalf via CFA Forwarder"
-          color="#8b5cf6"
-          delay={30}
-          active={activeStep === 1}
-        />
+      <div style={{ display: "flex", gap: 80, position: "relative", zIndex: 1 }}>
+        {/* Left side - Title */}
+        <div style={{ flex: "0 0 400px" }}>
+          <div
+            style={{
+              opacity: titleOpacity,
+              transform: `translateY(${titleY}px)`,
+              position: "sticky",
+              top: 80,
+            }}
+          >
+            <h1
+              style={{
+                fontSize: 56,
+                fontWeight: 400,
+                color: "black",
+                margin: 0,
+                fontFamily: "'Instrument Serif', Georgia, serif",
+                letterSpacing: "-0.02em",
+                lineHeight: 1.1,
+              }}
+            >
+              How it works
+            </h1>
+            <p style={{ fontSize: 20, color: "#666", marginTop: 20, lineHeight: 1.6 }}>
+              From click to streaming in seconds. No accounts, no API keys, no gas fees.
+            </p>
 
-        <Step
-          number={2}
-          title="Request Protected Resource"
-          description="Click 'Access Content' - server returns HTTP 402 with payment requirements"
-          color="#3b82f6"
-          delay={60}
-          active={activeStep === 2}
-        />
-
-        <Step
-          number={3}
-          title="Sign Payment Authorization"
-          description="x402-axios prompts wallet to sign EIP-3009 TransferWithAuthorization (gasless!)"
-          color="#10b981"
-          delay={90}
-          active={activeStep === 3}
-        />
-
-        <Step
-          number={4}
-          title="Facilitator Processes Payment"
-          description="Backend calls contract's processPayment() - atomically pulls USDC, wraps, creates stream"
-          color="#f59e0b"
-          delay={120}
-          active={activeStep === 4}
-        />
-
-        <Step
-          number={5}
-          title="Access Granted!"
-          description="Stream is active to DAO treasury. User can now access content as long as stream is active."
-          color="#ec4899"
-          delay={150}
-          active={activeStep >= 5}
-        />
-      </div>
-
-      {/* Highlight box */}
-      {frame > 600 && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 60,
-            left: 60,
-            right: 60,
-            padding: 24,
-            background: "rgba(16, 185, 129, 0.1)",
-            border: "1px solid rgba(16, 185, 129, 0.3)",
-            borderRadius: 12,
-            opacity: interpolate(frame, [600, 630], [0, 1], { extrapolateRight: "clamp" }),
-            display: "flex",
-            alignItems: "center",
-            gap: 20,
-          }}
-        >
-          <div style={{ fontSize: 48 }}>
-            {"\u2728"}
-          </div>
-          <div>
-            <div style={{ color: "#10b981", fontSize: 20, fontWeight: 600 }}>
-              User never pays gas!
-            </div>
-            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 16, marginTop: 4 }}>
-              They only sign a message. The operator pays gas to execute the contract.
-            </div>
+            {/* Key benefit */}
+            {frame > 80 && (
+              <div
+                style={{
+                  marginTop: 40,
+                  padding: 24,
+                  border: "2px solid black",
+                  opacity: interpolate(frame, [80, 90], [0, 1], { extrapolateRight: "clamp" }),
+                }}
+              >
+                <div style={{ fontSize: 18, fontWeight: 600, color: "black" }}>
+                  You only sign a message
+                </div>
+                <div style={{ fontSize: 14, color: "#666", marginTop: 8 }}>
+                  The facilitator pays all gas fees
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
+
+        {/* Right side - Steps */}
+        <div style={{ flex: 1 }}>
+          <Step
+            number={1}
+            title="Connect your wallet"
+            description="One-time permission grant to allow stream creation on your behalf"
+            delay={5}
+            active={activeStep === 1}
+          />
+
+          <Step
+            number={2}
+            title="Access protected content"
+            description="Server checks for active subscription stream"
+            delay={15}
+            active={activeStep === 2}
+          />
+
+          <Step
+            number={3}
+            title="Sign payment authorization"
+            description="Simple signature - no transaction, no gas required"
+            delay={25}
+            active={activeStep === 3}
+          />
+
+          <Step
+            number={4}
+            title="Stream is created"
+            description="USDC is wrapped and stream begins flowing to the DAO"
+            delay={35}
+            active={activeStep === 4}
+          />
+
+          <Step
+            number={5}
+            title="Access granted"
+            description="Enjoy the service as long as your stream is active"
+            delay={45}
+            active={activeStep >= 5}
+          />
+        </div>
+      </div>
     </AbsoluteFill>
   );
 };
