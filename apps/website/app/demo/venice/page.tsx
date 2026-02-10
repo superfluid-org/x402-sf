@@ -191,8 +191,8 @@ export default function VeniceChatPage() {
           ],
         })) as [string, number, bigint];
 
-        const [, permissions] = aclResult;
-        const hasPermissions = permissions === 7;
+        const [, permissions, flowrateAllowance] = aclResult;
+        const hasPermissions = permissions === 7 && flowrateAllowance >= SUBSCRIPTION_FLOW_RATE;
         setAclGranted(hasPermissions);
 
         const flowResult = (await publicClient.readContract({
