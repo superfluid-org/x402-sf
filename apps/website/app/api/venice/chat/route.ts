@@ -73,6 +73,18 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+
+      // Venice returns 402 or 429 when credits/quota are exhausted
+      if (response.status === 402 || response.status === 429) {
+        return NextResponse.json(
+          {
+            error: "Venice AI is temporarily out of credits. Please try again later.",
+            veniceCreditsExhausted: true,
+          },
+          { status: 503 }
+        );
+      }
+
       return NextResponse.json(
         { error: errorData.error?.message || "Venice API request failed" },
         { status: response.status }

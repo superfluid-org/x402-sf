@@ -400,8 +400,19 @@ export default function VeniceChatPage() {
       if (error?.response?.status === 429) {
         setRemainingRequests(0);
       }
-      setError(error?.response?.data?.error || "Failed to get response");
-      setMessages(prev => [...prev, { role: "assistant", content: "Sorry, I encountered an error. Please try again." }]);
+
+      const isCreditsExhausted = error?.response?.data?.veniceCreditsExhausted || error?.response?.status === 503;
+      const errorMsg = isCreditsExhausted
+        ? "Venice AI is temporarily out of credits. Please try again later."
+        : (error?.response?.data?.error || "Failed to get response");
+
+      setError(errorMsg);
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: isCreditsExhausted
+          ? "I'm temporarily unavailable — our AI credits have run out. Please try again later!"
+          : "Sorry, I encountered an error. Please try again.",
+      }]);
     } finally {
       setIsGeneratingChat(false);
     }
@@ -583,7 +594,7 @@ export default function VeniceChatPage() {
                   {subscriptionStatus === "active" ? (
                     <>
                       <span style={{ fontSize: 16 }}>&#10003;</span>
-                      Active ({formatFlowRate(streamFlowRate)} USDCx/mo)
+                      Active
                     </>
                   ) : subscriptionStatus === "checking" ? (
                     <>
@@ -620,6 +631,7 @@ export default function VeniceChatPage() {
                 )}
               </div>
 
+              {/* DIEM Staking card - hidden until we have real data
               <div className="venice-card staking-card">
                 <h3>DIEM Staking</h3>
                 <div className="staking-stat">
@@ -638,6 +650,7 @@ export default function VeniceChatPage() {
                   Buying and staking DIEM increases the overall compute capacity available to all subscribers.
                 </p>
               </div>
+              */}
 
               <div className="venice-card sup-psa">
                 <h4>
