@@ -52,7 +52,6 @@ export function Providers({
 
   return (
     <WagmiProvider config={config as Config} initialState={initialState}>
-      {/* @ts-expect-error React 19 ReactNode vs @tanstack/react-query's React 18 ReactNode */}
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </WagmiProvider>
   );

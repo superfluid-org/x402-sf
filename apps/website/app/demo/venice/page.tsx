@@ -6,6 +6,7 @@ import { withPaymentInterceptor } from "x402-axios";
 import { useAccount, useWalletClient } from "wagmi";
 import { createPublicClient, http, formatUnits, encodeFunctionData, encodeAbiParameters } from "viem";
 import { base } from "viem/chains";
+import ReactMarkdown from "react-markdown";
 import { SUPER_TOKEN_CONFIG } from "../../config/supertoken";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -118,6 +119,8 @@ const CFA_AGREEMENT_ABI = [
 // USDCx approve allowance for fee collection (10 USDCx covers many subscriptions)
 const USDCX_FEE_ALLOWANCE = BigInt("10000000000000000000"); // 10 USDCx
 
+const SUPERFLUID_SUBGRAPH_URL = "https://subgraph-endpoints.superfluid.dev/base-mainnet/protocol-v1";
+
 type SubscriptionStatus = "checking" | "active" | "inactive" | "subscribing";
 
 interface Message {
@@ -160,6 +163,7 @@ export default function VeniceChatPage() {
   const [usdcxBalance, setUsdcxBalance] = useState<bigint | null>(null);
   const [hasUsdcxAllowance, setHasUsdcxAllowance] = useState(false);
   const [subscribingWithUsdcx, setSubscribingWithUsdcx] = useState(false);
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
   // Auth state - cached signature for API requests
   const [authPayload, setAuthPayload] = useState<AuthPayload | null>(null);
@@ -629,6 +633,42 @@ export default function VeniceChatPage() {
     }
   };
 
+  // Fetch stream URL from Superfluid subgraph when subscription is active
+  useEffect(() => {
+    if (subscriptionStatus !== "active" || !address) {
+      setStreamUrl(null);
+      return;
+    }
+
+    const fetchStreamUrl = async () => {
+      try {
+        const response = await axios.post(SUPERFLUID_SUBGRAPH_URL, {
+          query: `{
+            streams(
+              where: {
+                sender: "${address.toLowerCase()}"
+                receiver: "${RECIPIENT_ADDRESS.toLowerCase()}"
+                token: "${SUPER_TOKEN_CONFIG.superToken.address.toLowerCase()}"
+                currentFlowRate_gt: "0"
+              }
+              orderBy: createdAtTimestamp
+              orderDirection: desc
+              first: 1
+            ) { id }
+          }`,
+        });
+        const streams = response.data?.data?.streams;
+        if (streams && streams.length > 0) {
+          setStreamUrl(`https://app.superfluid.org/stream/base/${streams[0].id}`);
+        }
+      } catch (err) {
+        console.error("Failed to fetch stream ID:", err);
+      }
+    };
+
+    fetchStreamUrl();
+  }, [subscriptionStatus, address]);
+
   const formatFlowRate = (flowRate: bigint) => {
     if (flowRate === BigInt(0)) return "0";
     const monthly = flowRate * BigInt(2628000); // Superfluid's (365/12) days
@@ -801,8 +841,12 @@ export default function VeniceChatPage() {
                           <div className="chat-avatar">
                             {msg.role === "user" ? "U" : "V"}
                           </div>
-                          <div className="chat-bubble">
-                            {msg.content}
+                          <div className="chat-bubble markdown-content">
+                            {msg.role === "assistant" ? (
+                              <ReactMarkdown>{msg.content}</ReactMarkdown>
+                            ) : (
+                              msg.content
+                            )}
                           </div>
                         </div>
                       ))}
@@ -874,7 +918,7 @@ export default function VeniceChatPage() {
                 </div>
                 {subscriptionStatus === "active" && (
                   <a
-                    href="https://app.superfluid.org/token/base/0xd04383398dd2426297da660f9cca3d439af9ce1b"
+                    href={streamUrl || `https://app.superfluid.org/token/base/${SUPER_TOKEN_CONFIG.superToken.address}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -890,7 +934,7 @@ export default function VeniceChatPage() {
                       textAlign: "center",
                     }}
                   >
-                    View Stream Dashboard →
+                    {streamUrl ? "View Your Stream →" : "View Stream Dashboard →"}
                   </a>
                 )}
               </div>
