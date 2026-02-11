@@ -16,7 +16,7 @@ export default function VeniceLandingPage() {
               Community-Run AI
             </h1>
             <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-              A community-run AI demo powered by Superfluid streams and Venice APIs.
+              A community-run AI demo powered by Superfluid payment streams and Venice APIs.
               Subscribe and your payment flows directly to the Superfluid DAO.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -75,7 +75,7 @@ export default function VeniceLandingPage() {
                 <h3 className="text-xl font-semibold mb-2">Subscribe</h3>
                 <p className="text-gray-600">
                   Connect your wallet and start a stream of <strong>1 USDCx/month</strong> + 1 USDCx deposit.
-                  Your subscription streams directly to the Superfluid DAO via Superfluid.
+                  Your subscription payment streams directly to the Superfluid DAO via Superfluid.
                 </p>
               </div>
 

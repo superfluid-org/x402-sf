@@ -10,7 +10,7 @@ export default function Features() {
     },
     {
       title: "Zero wait",
-      description: "Money streams at the speed of the internet with real-time continuous payments that you can cancel anytime",
+      description: "Payment streams at the speed of the internet with real-time continuous payments that you can cancel anytime",
     },
     {
       title: "Zero friction",
@@ -21,7 +21,7 @@ export default function Features() {
       description: "Anyone on the internet can build on or extend x402 with Superfluid. Open facilitator pattern",
     },
     {
-      title: "Real-time streaming",
+      title: "Real-time payment streams",
       description: "Continuous payment flows that update in real-time, perfect for pay-per-use APIs",
     },
   ];

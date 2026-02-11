@@ -17,7 +17,7 @@ const queryClient = new QueryClient({
 
 const metadata = {
   name: "x402 + Superfluid",
-  description: "Pay-as-you-go content with Superfluid streams",
+  description: "Pay-as-you-go content with Superfluid payment streams",
   url: typeof window !== "undefined" ? window.location.origin : "https://x402.dev",
   icons: ["https://avatars.githubusercontent.com/u/37784886"],
 };

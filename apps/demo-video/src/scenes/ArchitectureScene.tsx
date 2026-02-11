@@ -117,7 +117,7 @@ export const ArchitectureScene: React.FC = () => {
 
         <ComparisonRow
           oldWay="Monthly billing cycles, lock-in"
-          newWay="Real-time streaming, cancel anytime"
+          newWay="Real-time money streams, cancel anytime"
           delay={35}
         />
 
@@ -139,7 +139,7 @@ export const ArchitectureScene: React.FC = () => {
             }}
           >
             <div style={{ fontSize: 28, fontWeight: 600, color: "black", marginBottom: 8 }}>
-              1 USDC/month streams to the DAO treasury
+              1 USDC/month money stream to the DAO treasury
             </div>
             <div style={{ fontSize: 18, color: "#666" }}>
               Fair, transparent pricing with no hidden fees

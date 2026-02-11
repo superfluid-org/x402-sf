@@ -408,7 +408,7 @@ export default function DemoPage() {
                 </p>
                 <ol style={{ marginLeft: "1.25rem", lineHeight: "1.6" }}>
                   <li style={{ marginBottom: "0.5rem" }}>
-                    <strong>Grant ACL Permissions (one-time):</strong> Allow the facilitator to create streams on your behalf.{" "}
+                    <strong>Grant ACL Permissions (one-time):</strong> Allow the facilitator to create payment streams on your behalf.{" "}
                     <a 
                       href="https://docs.superfluid.org/docs/sdk/money-streaming/acl-user-data" 
                       target="_blank" 
@@ -420,10 +420,10 @@ export default function DemoPage() {
                     {" "}<span style={{ fontSize: "0.85rem", color: "#6b7280" }}>(note: this step won't be necessary in the future)</span>
                   </li>
                   <li style={{ marginBottom: "0.5rem" }}>
-                    <strong>Payment & Wrapping:</strong> Your USDC is automatically wrapped to USDCx and a stream is started to the receiver address
+                    <strong>Payment & Wrapping:</strong> Your USDC is automatically wrapped to USDCx and a money stream is started to the receiver address
                   </li>
                   <li>
-                    <strong>Continuous Access:</strong> You'll have access to the pay-gated content as long as your stream remains active
+                    <strong>Continuous Access:</strong> You'll have access to the pay-gated content as long as your money stream remains active
                   </li>
                 </ol>
               </div>
@@ -478,7 +478,7 @@ export default function DemoPage() {
                         <div style={{ textAlign: "center", marginBottom: 24 }}>
                           <h2 style={{ marginBottom: 16 }}>Grant ACL Permissions</h2>
                           <p style={{ color: "#6b7280", marginBottom: 16 }}>
-                            Grant one-time permission for the facilitator to create streams on your behalf.
+                            Grant one-time permission for the facilitator to create payment streams on your behalf.
                             This enables signature-only stream creation (no gas fees for future payments).
                           </p>
                           {facilitatorAddress && (
