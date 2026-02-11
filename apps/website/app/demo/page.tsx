@@ -16,7 +16,7 @@ export default function VeniceLandingPage() {
               Community-Run AI
             </h1>
             <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-              A community-run AI demo powered by Superfluid streams.
+              A community-run AI demo powered by Superfluid streams and Venice APIs.
               Subscribe and your payment flows directly to the Superfluid DAO.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -86,7 +86,7 @@ export default function VeniceLandingPage() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Access AI</h3>
                 <p className="text-gray-600">
-                  Chat with uncensored AI models (10 requests/day).
+                  Chat with uncensored Venice AI models (10 requests/day).
                   All requests are authenticated via wallet signature.
                 </p>
               </div>
