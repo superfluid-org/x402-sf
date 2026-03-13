@@ -66,6 +66,16 @@ export default function Footer() {
                   Superfluid
                 </a>
               </li>
+              <li>
+                <a 
+                  href="https://www.superfluid.org/contact" 
+                  className="text-gray-600 hover:text-black transition-colors" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                >
+                  Contact
+                </a>
+              </li>
             </ul>
           </div>
         </div>
