@@ -51,7 +51,7 @@ export default function Header() {
               Simple Demo
             </Link>
             <a
-              href="https://docs.google.com/forms/d/e/1FAIpQLSfdxN7dGchn4CNQAF9bJDA4PMWH8D8q3lc_kI4ytddkZ2fsjQ/viewform"
+              href="https://www.superfluid.org/contact"
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-2 bg-black text-white hover:bg-gray-800 transition-colors text-sm font-medium"
@@ -75,7 +75,7 @@ export default function Header() {
               Simple
             </Link>
             <a
-              href="https://docs.google.com/forms/d/e/1FAIpQLSfdxN7dGchn4CNQAF9bJDA4PMWH8D8q3lc_kI4ytddkZ2fsjQ/viewform"
+              href="https://www.superfluid.org/contact"
               target="_blank"
               rel="noopener noreferrer"
               className="px-3 py-1.5 bg-black text-white hover:bg-gray-800 transition-colors text-xs font-medium"
