@@ -6,7 +6,11 @@ import { z } from "zod";
 import { getAddress, isAddress, recoverAddress, type Address, type Hex } from "viem";
 import { createBasePublicClient, createFacilitatorWalletClient } from "./superfluid.js";
 import { SUPER_TOKEN_CONFIG } from "./config.js";
-import { CLEAR_MACRO_FORWARDER_ADDRESS, CLEAR_MACRO_FORWARDER_ABI } from "./clearMacro.js";
+import {
+  CLEAR_MACRO_FORWARDER_ADDRESS,
+  CLEAR_MACRO_FORWARDER_ABI,
+  CLEAR_MACRO_FORWARDER_READ_ABI,
+} from "./clearMacro.js";
 
 loadEnv();
 
@@ -118,7 +122,7 @@ app.post("/clearmacro/relay", async (c) => {
   try {
     const digest = await publicClient.readContract({
       address: CLEAR_MACRO_FORWARDER_ADDRESS,
-      abi: CLEAR_MACRO_FORWARDER_ABI,
+      abi: CLEAR_MACRO_FORWARDER_READ_ABI,
       functionName: "getDigest",
       args: [macro, payloadHex],
     });
@@ -197,7 +201,7 @@ app.post("/clearmacro/permit2-relay", async (c) => {
   try {
     const expectedWitness = await publicClient.readContract({
       address: CLEAR_MACRO_FORWARDER_ADDRESS,
-      abi: CLEAR_MACRO_FORWARDER_ABI,
+      abi: CLEAR_MACRO_FORWARDER_READ_ABI,
       functionName: "getPermit2WitnessStructHash",
       args: [macro, payloadHex, upgradeSuperToken],
     });
