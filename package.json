@@ -3,14 +3,16 @@
   "private": true,
   "packageManager": "pnpm@10.0.0",
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "build": "pnpm --filter @super-x402/website build",
     "build:facilitator": "pnpm --filter @super-x402/facilitator build",
     "build:website": "pnpm --filter @super-x402/website build",
     "build:all": "pnpm build:facilitator && pnpm build:website",
-    "dev:website": "pnpm --filter @super-x402/website dev"
+    "dev:website": "pnpm --filter @super-x402/website dev",
+    "build:sdk": "pnpm --filter x402-sf build"
   },
   "devDependencies": {
     "@types/node": "^20.14.2",

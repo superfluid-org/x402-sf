@@ -1,30 +1,13 @@
-export const SUPER_TOKEN_CONFIG = {
-  chain: {
-    id: 8453,
-    name: "Base",
-    rpcUrl: "https://rpc-endpoints.superfluid.dev/base-mainnet",
-    blockExplorerUrl: "https://basescan.org",
-  },
-  superToken: {
-    symbol: "USDCx",
-    address: "0xd04383398dd2426297da660f9cca3d439af9ce1b" as const,
-    decimals: 18,
-  },
-  underlyingToken: {
-    symbol: "USDC",
-    address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" as const,
-    decimals: 6,
-    supportsEIP3009: true,
-  },
-  superfluid: {
-    // CFA V1 Forwarder on Base mainnet
-    cfaV1Forwarder: "0xcfA132E353cB4E398080B9700609bb008eceB125" as const,
-    // CFA contract on Base mainnet
-    cfa: "0x19ba78B9cDB05A877718841c574325fdB53601bb" as const,
-    // Superfluid Host on Base mainnet
-    host: "0x4C073B3baB6d8826b8C5b229f3cfdC1eC6E47E74" as const,
-  },
-} as const;
+import { BASE_MAINNET_CONFIG, BASE_SEPOLIA_CONFIG } from "x402-sf";
+export type { SuperTokenConfig } from "x402-sf";
+export { BASE_MAINNET_CONFIG, BASE_SEPOLIA_CONFIG } from "x402-sf";
 
-export type SuperTokenConfig = typeof SUPER_TOKEN_CONFIG;
+export const IS_TESTNET = process.env.NEXT_PUBLIC_TESTNET_MODE === "true";
 
+export const SUPER_TOKEN_CONFIG = IS_TESTNET ? BASE_SEPOLIA_CONFIG : BASE_MAINNET_CONFIG;
+
+// Stream recipient (DAO Treasury). Override per-deployment via NEXT_PUBLIC_RECIPIENT_ADDRESS.
+// For the mainnet clear-signing launch, the new recipient address plugs in here (env) —
+// no code change required.
+export const RECIPIENT_ADDRESS = (process.env.NEXT_PUBLIC_RECIPIENT_ADDRESS ??
+  "0xac808840f02c47C05507f48165d2222FF28EF4e1") as `0x${string}`;

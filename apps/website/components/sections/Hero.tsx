@@ -41,24 +41,22 @@ export default function Hero() {
           </h2>
           <div className="bg-gray-50 rounded-lg p-6 overflow-x-auto">
             <pre className="text-sm text-gray-800 font-mono leading-relaxed">
-              <code>{`// Client: Just use x402-axios middleware
-import { withPaymentInterceptor } from 'x402-axios';
+              <code>{`// Client: one hook, one signature
+import { usePermit2MacroStream } from 'x402-sf';
 
-const x402Client = withPaymentInterceptor(
-  axios.create({ baseURL: 'https://api.example.com' }),
-  walletClient
-);
-
-// Make request - middleware handles everything automatically!
-const response = await x402Client.get('/resource', {
-  params: { account: userAddress, recipient: recipientAddress }
+const { status, subscribe } = usePermit2MacroStream({
+  facilitatorUrl: FACILITATOR_URL,
+  recipient: RECIPIENT_ADDRESS,
+  config: BASE_MAINNET_CONFIG,
 });
 
-console.log(response.data); // Access granted with active stream!`}</code>
+// A single Permit2 signature pulls USDC, wraps it to
+// USDCx, and opens the stream — gasless for the user.
+<button onClick={subscribe}>Subscribe</button>`}</code>
             </pre>
           </div>
           <p className="text-gray-600 mt-6 text-sm leading-relaxed">
-            That's it! The middleware handles 402 responses, payment signing, and retries automatically. No manual balance checking, permission granting, or payment handling needed.
+            That's it! One signature does it all — the Clear Macro forwarder pulls the USDC, wraps it, and opens the stream on the user's behalf. No approvals, no ACL grants, no gas for the stream.
           </p>
         </div>
       </div>

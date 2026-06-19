@@ -1,0 +1,68 @@
+{
+  "name": "x402-sf",
+  "version": "0.1.0",
+  "description": "Single-hook SDK for x402 streaming payments on Superfluid — handles ACL permissions, ERC-20/USDCx approvals, and EIP-3009 clear signing in one call.",
+  "license": "MIT",
+  "author": "Superfluid",
+  "homepage": "https://github.com/superfluid-org/x402-sf/tree/main/packages/sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/superfluid-org/x402-sf.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/superfluid-org/x402-sf/issues"
+  },
+  "keywords": [
+    "x402",
+    "superfluid",
+    "streaming-payments",
+    "eip-3009",
+    "clear-signing",
+    "usdc",
+    "viem",
+    "wagmi",
+    "react"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "axios": "^1.13.2"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "viem": ">=2",
+    "wagmi": ">=2"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "react": "^19",
+    "typescript": "^5",
+    "viem": "^2.13.1",
+    "wagmi": "^2.19.2"
+  }
+}
