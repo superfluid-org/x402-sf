@@ -17,5 +17,10 @@
   "devDependencies": {
     "@types/node": "^20.14.2",
     "@types/uuid": "^9.0.8"
+  },
+  "pnpm": {
+    "overrides": {
+      "viem": "2.52.2"
+    }
   }
 }
