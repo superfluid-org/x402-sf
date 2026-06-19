@@ -7,37 +7,6 @@ import type { Address } from "viem";
 export const CLEAR_MACRO_FORWARDER_ADDRESS: Address =
   "0xC1EaB73855155D4e021f7EB4f866996Bac2fe25e";
 
-/**
- * View-only subset used for the pre-flight `readContract` calls. Kept separate from the
- * full ABI on purpose: feeding viem's `readContract` the entire forwarder ABI (the deeply
- * nested `runPermit2AndMacro` tuple plus every custom error) can exceed TypeScript's type
- * instantiation budget, making inference fall back to the broad `call` parameter type that
- * demands `authorizationList`. A two-function ABI keeps that inference cheap and reliable.
- */
-export const CLEAR_MACRO_FORWARDER_READ_ABI = [
-  {
-    name: "getDigest",
-    type: "function",
-    stateMutability: "view",
-    inputs: [
-      { name: "m", type: "address" },
-      { name: "encodedPayload", type: "bytes" },
-    ],
-    outputs: [{ name: "", type: "bytes32" }],
-  },
-  {
-    name: "getPermit2WitnessStructHash",
-    type: "function",
-    stateMutability: "view",
-    inputs: [
-      { name: "m", type: "address" },
-      { name: "encodedPayload", type: "bytes" },
-      { name: "upgradeSuperToken", type: "address" },
-    ],
-    outputs: [{ name: "", type: "bytes32" }],
-  },
-] as const;
-
 /** Minimal forwarder ABI needed to relay and pre-check a Clear Macro execution. */
 export const CLEAR_MACRO_FORWARDER_ABI = [
   {

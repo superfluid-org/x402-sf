@@ -62,7 +62,7 @@
     "@types/react": "^19",
     "react": "^19",
     "typescript": "^5",
-    "viem": "^2.13.1",
+    "viem": "^2.52.2",
     "wagmi": "^2.19.2"
   }
 }
