@@ -36,6 +36,28 @@ const walletClient = createFacilitatorWalletClient(facilitatorPrivateKey, rpcUrl
 const facilitatorAccount = walletClient.account;
 const facilitatorAddress = facilitatorAccount.address;
 
+// Read a bytes32 view function on the ClearMacroForwarder.
+//
+// viem's client-method `readContract` parameter type is computed from a deep, recursive
+// conditional-type chain. Under tighter type-inference budgets (notably Vercel's build) TS
+// bails out of that inference and widens the param to a `CallParameters` union member that
+// wrongly requires the EIP-7702 `authorizationList` field — failing the build with
+// "Property 'authorizationList' is missing". It compiles fine locally because TS completes
+// the inference there. These are plain `view` reads with statically-known, correct ABI
+// args, so we cast past the unstable param inference; the `Promise<Hex>` return keeps the
+// call sites type-safe.
+function readForwarderBytes32(
+  functionName: "getDigest" | "getPermit2WitnessStructHash",
+  args: readonly (Address | Hex)[],
+): Promise<Hex> {
+  return publicClient.readContract({
+    address: CLEAR_MACRO_FORWARDER_ADDRESS,
+    abi: CLEAR_MACRO_FORWARDER_ABI,
+    functionName,
+    args,
+  } as never) as Promise<Hex>;
+}
+
 // Clear Macro relay: the provider string whose ACL role the facilitator must hold on the
 // forwarder. Superfluid grants keccak256(CLEARMACRO_PROVIDER) → this facilitator address.
 const clearMacroProvider = process.env.CLEARMACRO_PROVIDER ?? "x402.superfluid.eth";
@@ -116,12 +138,7 @@ app.post("/clearmacro/relay", async (c) => {
   // Pre-flight: recover the signer from the forwarder's on-chain digest so we never spend
   // gas relaying a runMacro the forwarder would revert with InvalidSignature.
   try {
-    const digest = await publicClient.readContract({
-      address: CLEAR_MACRO_FORWARDER_ADDRESS,
-      abi: CLEAR_MACRO_FORWARDER_ABI,
-      functionName: "getDigest",
-      args: [macro, payloadHex],
-    });
+    const digest = await readForwarderBytes32("getDigest", [macro, payloadHex]);
     const recovered = await recoverAddress({ hash: digest, signature: signatureHex });
     if (recovered.toLowerCase() !== signer.toLowerCase()) {
       return c.json({ error: "Signature does not match signer for this payload" }, 400);
@@ -195,12 +212,11 @@ app.post("/clearmacro/permit2-relay", async (c) => {
 
   // Pre-check: the witness must match the on-chain struct hash, else runPermit2AndMacro reverts.
   try {
-    const expectedWitness = await publicClient.readContract({
-      address: CLEAR_MACRO_FORWARDER_ADDRESS,
-      abi: CLEAR_MACRO_FORWARDER_ABI,
-      functionName: "getPermit2WitnessStructHash",
-      args: [macro, payloadHex, upgradeSuperToken],
-    });
+    const expectedWitness = await readForwarderBytes32("getPermit2WitnessStructHash", [
+      macro,
+      payloadHex,
+      upgradeSuperToken,
+    ]);
     if (ctx.witness.toLowerCase() !== expectedWitness.toLowerCase()) {
       return c.json({ error: "Witness does not match payload" }, 400);
     }
