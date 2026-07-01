@@ -5,7 +5,10 @@ export interface ClearMacroFacilitatorInfo {
     forwarder: Address;
     provider: string;
     macro?: Address;
+    /** Relay endpoint for the Permit2 path (pull USDC → wrap → stream). */
     permit2RelayPath: string;
+    /** Relay endpoint for the plain path (open a stream from existing USDCx, no wrap). */
+    relayPath?: string;
 }
 export interface UsePermit2MacroStreamOptions {
     facilitatorUrl: string;

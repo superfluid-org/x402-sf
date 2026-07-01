@@ -7,6 +7,7 @@ import type { SuperTokenConfig, Balances } from "../types.js";
 import { BASE_MAINNET_CONFIG } from "../config.js";
 import { DEFAULT_MONTHLY_AMOUNT } from "../constants.js";
 import { createStreamViaPermit2Macro, facilitatorPermit2Relay } from "../core/clearMacroPermit2.js";
+import { createStreamViaClearMacro, facilitatorRelay } from "../core/clearMacro.js";
 import { checkPermit2Allowance, approvePermit2 } from "../core/permit2.js";
 import { fetchBalances } from "../core/balances.js";
 import { checkStream, fetchStreamUrl } from "../core/stream.js";
@@ -32,7 +33,10 @@ export interface ClearMacroFacilitatorInfo {
   forwarder: Address;
   provider: string;
   macro?: Address;
+  /** Relay endpoint for the Permit2 path (pull USDC → wrap → stream). */
   permit2RelayPath: string;
+  /** Relay endpoint for the plain path (open a stream from existing USDCx, no wrap). */
+  relayPath?: string;
 }
 
 export interface UsePermit2MacroStreamOptions {
@@ -111,6 +115,7 @@ export function usePermit2MacroStream(
             provider: cm.provider,
             macro: cm.macro ?? configuredMacro,
             permit2RelayPath: cm.permit2RelayPath,
+            relayPath: cm.relayPath,
           });
         }
       })
@@ -159,6 +164,10 @@ export function usePermit2MacroStream(
             if (!cancelled) setStreamUrl(u);
           });
           setStatus((prev) => (busy(prev) ? prev : "active"));
+        } else if (bal.usdcx !== null && bal.usdcx >= monthlyAmount) {
+          // Already holds enough USDCx — no wrap and no Permit2 approval needed; the stream
+          // can be opened straight from their USDCx with a single gasless signature.
+          setStatus((prev) => (busy(prev) ? prev : "ready"));
         } else {
           setStatus((prev) => (busy(prev) ? prev : allowance >= upgradeAmount ? "ready" : "needs-approval"));
         }
@@ -171,7 +180,7 @@ export function usePermit2MacroStream(
     return () => {
       cancelled = true;
     };
-  }, [isConnected, address, isOnCorrectNetwork, info, configuredMacro, config, upgradeAmount, recipient]);
+  }, [isConnected, address, isOnCorrectNetwork, info, configuredMacro, config, upgradeAmount, monthlyAmount, recipient]);
 
   const approve = useCallback(async () => {
     if (!address || !walletClient) {
@@ -213,30 +222,61 @@ export function usePermit2MacroStream(
       const chain = getChain(config.chain.id);
       const publicClient = createPublicClient({ chain, transport: http(config.chain.rpcUrl) });
 
-      // One-time: make sure Permit2 is allowed to pull the underlying token (gas tx).
-      const allowance = await checkPermit2Allowance(publicClient, address, config.underlyingToken.address);
-      if (allowance < upgradeAmount) {
-        setStatus("approving");
-        const approveHash = await approvePermit2(walletClient as never, {
-          token: config.underlyingToken.address,
-          account: address,
-          chain,
-        });
-        await publicClient.waitForTransactionReceipt({ hash: approveHash });
-      }
+      // If the user already holds enough USDCx, skip the pull + wrap entirely and open the
+      // stream straight from their USDCx via the plain (non-Permit2) relay — no approval, no
+      // gas, one signature. Falls back to the Permit2 wrap path when they don't (or when the
+      // facilitator doesn't expose the plain relay endpoint).
+      const bal = await fetchBalances(publicClient, address, config);
+      setBalances(bal);
+      const canStreamFromUsdcx =
+        bal.usdcx !== null && bal.usdcx >= monthlyAmount && !!info.relayPath;
 
-      setStatus("subscribing");
-      const { execution, txHash: hash } = await createStreamViaPermit2Macro({
-        publicClient,
-        walletClient: walletClient as never,
-        account: address,
-        config,
-        recipient,
-        monthlyAmount,
-        macroAddress: macro,
-        providerName: info.provider,
-        relay: facilitatorPermit2Relay(`${facilitatorUrl}${info.permit2RelayPath}`),
-      });
+      let execution: { description: string };
+      let hash: `0x${string}`;
+
+      if (canStreamFromUsdcx) {
+        setStatus("subscribing");
+        const res = await createStreamViaClearMacro({
+          publicClient,
+          walletClient: walletClient as never,
+          account: address,
+          config,
+          recipient,
+          monthlyAmount,
+          macroAddress: macro,
+          providerName: info.provider,
+          relay: facilitatorRelay(`${facilitatorUrl}${info.relayPath}`),
+        });
+        execution = res.execution;
+        hash = res.txHash;
+      } else {
+        // One-time: make sure Permit2 is allowed to pull the underlying token (gas tx).
+        const allowance = await checkPermit2Allowance(publicClient, address, config.underlyingToken.address);
+        if (allowance < upgradeAmount) {
+          setStatus("approving");
+          const approveHash = await approvePermit2(walletClient as never, {
+            token: config.underlyingToken.address,
+            account: address,
+            chain,
+          });
+          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        }
+
+        setStatus("subscribing");
+        const res = await createStreamViaPermit2Macro({
+          publicClient,
+          walletClient: walletClient as never,
+          account: address,
+          config,
+          recipient,
+          monthlyAmount,
+          macroAddress: macro,
+          providerName: info.provider,
+          relay: facilitatorPermit2Relay(`${facilitatorUrl}${info.permit2RelayPath}`),
+        });
+        execution = res.execution;
+        hash = res.txHash;
+      }
 
       setTxHash(hash);
       setDescription(execution.description);

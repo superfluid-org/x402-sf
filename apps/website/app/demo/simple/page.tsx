@@ -132,7 +132,7 @@ export default function DemoPage() {
                         <div style={{ textAlign: "center", marginBottom: 24 }}>
                           <h2 style={{ marginBottom: 16 }}>Start your stream</h2>
                           <p style={{ color: "#6b7280", marginBottom: 24 }}>
-                            First time only: this grants the Permit2 contract permission to move your USDC, then
+                            First time only: this approves the Permit2 contract to move your USDC, then
                             immediately opens your stream. After this, future subscriptions are a single gasless signature.
                           </p>
                           {error && (
@@ -145,7 +145,7 @@ export default function DemoPage() {
                             onClick={subscribe}
                             style={{ padding: "12px 24px", fontSize: "1rem", fontWeight: 600, backgroundColor: "black", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}
                           >
-                            Grant permission to Permit2 and start stream
+                            Approve Permit2 &amp; start stream
                           </button>
                         </div>
                       )}
@@ -163,8 +163,8 @@ export default function DemoPage() {
                         <div style={{ textAlign: "center" }}>
                           <h2 style={{ marginBottom: 16 }}>Subscribe with one signature</h2>
                           <p style={{ color: "#6b7280", marginBottom: 24 }}>
-                            Sign a single Permit2 message — the facilitator pulls USDC, wraps it to USDCx, and opens
-                            your stream in one transaction. No approval, no gas, no pre-existing USDCx.
+                            Sign a single message — if you don&apos;t already hold USDCx, the facilitator pulls your
+                            USDC and wraps it for you, then opens your stream in one transaction. No gas.
                           </p>
                           {info && (
                             <p style={{ fontSize: "0.875rem", color: "#6b7280", marginBottom: 16 }}>

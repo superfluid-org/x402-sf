@@ -5,7 +5,7 @@ import axios from "axios";
 import { useAccount, useWalletClient } from "wagmi";
 import { formatUnits } from "viem";
 import ReactMarkdown from "react-markdown";
-import { usePermit2MacroStream, MIN_USDC_BALANCE } from "x402-sf";
+import { usePermit2MacroStream, MIN_USDC_BALANCE, DEFAULT_MONTHLY_AMOUNT } from "x402-sf";
 import { SUPER_TOKEN_CONFIG, RECIPIENT_ADDRESS } from "../../config/supertoken";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -177,9 +177,11 @@ export default function VeniceChatPage() {
   const isActive = subscriptionStatus === "active";
   const isChecking = subscriptionStatus === "loading";
   const isSubscribing = subscriptionStatus === "subscribing" || subscriptionStatus === "approving";
-  const needsPermissions = subscriptionStatus === "needs-approval" || subscriptionStatus === "ready";
 
   const hasEnoughUsdc = balances.usdc !== null && balances.usdc >= MIN_USDC_BALANCE;
+  // Already holds a month of USDCx — we can open the stream directly, no USDC/wrap needed.
+  const hasUsdcxForStream = balances.usdcx !== null && balances.usdcx >= DEFAULT_MONTHLY_AMOUNT;
+  const canSubscribe = hasEnoughUsdc || hasUsdcxForStream;
   const balancesLoaded = balances.usdc !== null && balances.usdcx !== null;
 
   return (
@@ -262,11 +264,21 @@ export default function VeniceChatPage() {
                               <p>Loading your balance...</p>
                               <div className="loading-spinner" style={{ margin: "0 auto" }} />
                             </>
-                          ) : hasEnoughUsdc ? (
+                          ) : canSubscribe ? (
                             <>
                               <p>
-                                One signature starts a 1 USDCx/month stream to the Superfluid DAO.<br />
-                                Permit2 pulls your USDC and wraps it — no separate approval, no gas for the stream.
+                                {hasUsdcxForStream ? (
+                                  <>
+                                    One signature opens a 1 USDCx/month stream to the Superfluid DAO from your
+                                    existing USDCx.<br />
+                                    No wrapping, no approval, no gas for the stream.
+                                  </>
+                                ) : (
+                                  <>
+                                    One signature starts a 1 USDCx/month stream to the Superfluid DAO.<br />
+                                    Your USDC is pulled and wrapped for you — no separate approval, no gas for the stream.
+                                  </>
+                                )}
                               </p>
                               <button
                                 type="button"
@@ -274,7 +286,9 @@ export default function VeniceChatPage() {
                                 onClick={subscribe}
                                 disabled={!walletClient}
                               >
-                                {needsPermissions ? "Grant permission to Permit2 and start stream" : "Start Stream"}
+                                {subscriptionStatus === "needs-approval"
+                                  ? "Approve Permit2 & start stream"
+                                  : "Start Stream"}
                               </button>
                             </>
                           ) : (

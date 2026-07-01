@@ -5,6 +5,7 @@ import { useAccount, useWalletClient, useChainId } from "wagmi";
 import { BASE_MAINNET_CONFIG } from "../config.js";
 import { DEFAULT_MONTHLY_AMOUNT } from "../constants.js";
 import { createStreamViaPermit2Macro, facilitatorPermit2Relay } from "../core/clearMacroPermit2.js";
+import { createStreamViaClearMacro, facilitatorRelay } from "../core/clearMacro.js";
 import { checkPermit2Allowance, approvePermit2 } from "../core/permit2.js";
 import { fetchBalances } from "../core/balances.js";
 import { checkStream, fetchStreamUrl } from "../core/stream.js";
@@ -57,6 +58,7 @@ export function usePermit2MacroStream(options) {
                     provider: cm.provider,
                     macro: cm.macro ?? configuredMacro,
                     permit2RelayPath: cm.permit2RelayPath,
+                    relayPath: cm.relayPath,
                 });
             }
         })
@@ -104,6 +106,11 @@ export function usePermit2MacroStream(options) {
                     });
                     setStatus((prev) => (busy(prev) ? prev : "active"));
                 }
+                else if (bal.usdcx !== null && bal.usdcx >= monthlyAmount) {
+                    // Already holds enough USDCx — no wrap and no Permit2 approval needed; the stream
+                    // can be opened straight from their USDCx with a single gasless signature.
+                    setStatus((prev) => (busy(prev) ? prev : "ready"));
+                }
                 else {
                     setStatus((prev) => (busy(prev) ? prev : allowance >= upgradeAmount ? "ready" : "needs-approval"));
                 }
@@ -118,7 +125,7 @@ export function usePermit2MacroStream(options) {
         return () => {
             cancelled = true;
         };
-    }, [isConnected, address, isOnCorrectNetwork, info, configuredMacro, config, upgradeAmount, recipient]);
+    }, [isConnected, address, isOnCorrectNetwork, info, configuredMacro, config, upgradeAmount, monthlyAmount, recipient]);
     const approve = useCallback(async () => {
         if (!address || !walletClient) {
             setError("Wallet not connected");
@@ -157,29 +164,58 @@ export function usePermit2MacroStream(options) {
         try {
             const chain = getChain(config.chain.id);
             const publicClient = createPublicClient({ chain, transport: http(config.chain.rpcUrl) });
-            // One-time: make sure Permit2 is allowed to pull the underlying token (gas tx).
-            const allowance = await checkPermit2Allowance(publicClient, address, config.underlyingToken.address);
-            if (allowance < upgradeAmount) {
-                setStatus("approving");
-                const approveHash = await approvePermit2(walletClient, {
-                    token: config.underlyingToken.address,
+            // If the user already holds enough USDCx, skip the pull + wrap entirely and open the
+            // stream straight from their USDCx via the plain (non-Permit2) relay — no approval, no
+            // gas, one signature. Falls back to the Permit2 wrap path when they don't (or when the
+            // facilitator doesn't expose the plain relay endpoint).
+            const bal = await fetchBalances(publicClient, address, config);
+            setBalances(bal);
+            const canStreamFromUsdcx = bal.usdcx !== null && bal.usdcx >= monthlyAmount && !!info.relayPath;
+            let execution;
+            let hash;
+            if (canStreamFromUsdcx) {
+                setStatus("subscribing");
+                const res = await createStreamViaClearMacro({
+                    publicClient,
+                    walletClient: walletClient,
                     account: address,
-                    chain,
+                    config,
+                    recipient,
+                    monthlyAmount,
+                    macroAddress: macro,
+                    providerName: info.provider,
+                    relay: facilitatorRelay(`${facilitatorUrl}${info.relayPath}`),
                 });
-                await publicClient.waitForTransactionReceipt({ hash: approveHash });
+                execution = res.execution;
+                hash = res.txHash;
             }
-            setStatus("subscribing");
-            const { execution, txHash: hash } = await createStreamViaPermit2Macro({
-                publicClient,
-                walletClient: walletClient,
-                account: address,
-                config,
-                recipient,
-                monthlyAmount,
-                macroAddress: macro,
-                providerName: info.provider,
-                relay: facilitatorPermit2Relay(`${facilitatorUrl}${info.permit2RelayPath}`),
-            });
+            else {
+                // One-time: make sure Permit2 is allowed to pull the underlying token (gas tx).
+                const allowance = await checkPermit2Allowance(publicClient, address, config.underlyingToken.address);
+                if (allowance < upgradeAmount) {
+                    setStatus("approving");
+                    const approveHash = await approvePermit2(walletClient, {
+                        token: config.underlyingToken.address,
+                        account: address,
+                        chain,
+                    });
+                    await publicClient.waitForTransactionReceipt({ hash: approveHash });
+                }
+                setStatus("subscribing");
+                const res = await createStreamViaPermit2Macro({
+                    publicClient,
+                    walletClient: walletClient,
+                    account: address,
+                    config,
+                    recipient,
+                    monthlyAmount,
+                    macroAddress: macro,
+                    providerName: info.provider,
+                    relay: facilitatorPermit2Relay(`${facilitatorUrl}${info.permit2RelayPath}`),
+                });
+                execution = res.execution;
+                hash = res.txHash;
+            }
             setTxHash(hash);
             setDescription(execution.description);
             setStatus("active");
