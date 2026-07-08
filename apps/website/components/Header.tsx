@@ -44,12 +44,6 @@ export default function Header() {
             >
               Demo
             </Link>
-            <Link
-              href="/demo/simple"
-              className="px-4 py-2 bg-white text-black border-2 border-black hover:bg-gray-50 transition-colors text-sm font-medium"
-            >
-              Simple Demo
-            </Link>
             <a
               href="https://www.superfluid.org/contact"
               target="_blank"
@@ -67,12 +61,6 @@ export default function Header() {
               className="px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 transition-colors text-xs font-medium"
             >
               Demo
-            </Link>
-            <Link
-              href="/demo/simple"
-              className="px-3 py-1.5 bg-white text-black border-2 border-black hover:bg-gray-50 transition-colors text-xs font-medium"
-            >
-              Simple
             </Link>
             <a
               href="https://www.superfluid.org/contact"
