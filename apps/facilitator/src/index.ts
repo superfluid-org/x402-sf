@@ -3,10 +3,10 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
-import { getAddress, isAddress, publicActions, recoverAddress, type Address, type Hex, type PublicClient } from "viem";
+import { getAddress, isAddress, publicActions, recoverAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { verify, settle } from "x402/facilitator";
-import { VerifyRequestSchema, SettleRequestSchema, type Signer } from "x402/types";
+import { VerifyRequestSchema, SettleRequestSchema, type ConnectedClient, type Signer } from "x402/types";
 import { createNetworkClients, type NetworkClients } from "./superfluid.js";
 import { NETWORK_CONFIGS, ALL_NETWORKS, isNetworkName, type NetworkName } from "./config.js";
 import { CLEAR_MACRO_FORWARDER_ADDRESS, CLEAR_MACRO_FORWARDER_ABI } from "./clearMacro.js";
@@ -84,7 +84,7 @@ const primaryNetwork: NetworkName = networks.has("base") ? "base" : enabledNetwo
 // args, so we cast past the unstable param inference; the `Promise<Hex>` return keeps the
 // call sites type-safe.
 function readForwarderBytes32(
-  publicClient: PublicClient,
+  publicClient: NetworkClients["publicClient"],
   functionName: "getDigest" | "getPermit2WitnessStructHash",
   args: readonly (Address | Hex)[],
 ): Promise<Hex> {
@@ -383,7 +383,9 @@ app.post("/verify", async (c) => {
   }
 
   try {
-    const result = await verify(resolved.ctx.clients.publicClient, paymentPayload, paymentRequirements);
+    // Cast past viem's deep client-type inference (same instability handled for settle/reads).
+    const client = resolved.ctx.clients.publicClient as unknown as ConnectedClient;
+    const result = await verify(client, paymentPayload, paymentRequirements);
     return c.json(result);
   } catch (error) {
     console.error("❌ [/verify] verify failed", { error: `${error}` });
