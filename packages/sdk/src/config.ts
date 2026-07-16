@@ -60,7 +60,7 @@ export const BASE_SEPOLIA_CONFIG: SuperTokenConfig = {
   superfluidDashboardNetwork: "base-sepolia",
   clearMacro: {
     forwarder: "0xC1EaB73855155D4e021f7EB4f866996Bac2fe25e",
-    // createFlowMacro: "0x..." // set after deploying contracts/src/CreateFlowMacro.sol to Base Sepolia
+    createFlowMacro: "0xAb0181Abadcc687C962b097722FD9365Cc7Db9C5",
   },
 };
 

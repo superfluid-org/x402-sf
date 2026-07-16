@@ -17,6 +17,8 @@ runs = 256
 
 [rpc_endpoints]
 base = "${BASE_RPC_URL}"
+base-sepolia = "https://rpc-endpoints.superfluid.dev/base-sepolia"
 
 [etherscan]
 base = { key = "${BASESCAN_API_KEY}", url = "https://api.basescan.org/api" }
+base-sepolia = { key = "${BASESCAN_API_KEY}", chain = 84532, url = "https://api.etherscan.io/v2/api?chainid=84532" }
