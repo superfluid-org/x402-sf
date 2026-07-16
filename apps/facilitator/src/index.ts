@@ -3,9 +3,12 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
-import { getAddress, isAddress, recoverAddress, type Address, type Hex } from "viem";
-import { createBasePublicClient, createFacilitatorWalletClient } from "./superfluid.js";
-import { SUPER_TOKEN_CONFIG } from "./config.js";
+import { getAddress, isAddress, publicActions, recoverAddress, type Address, type Hex, type PublicClient } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { verify, settle } from "x402/facilitator";
+import { VerifyRequestSchema, SettleRequestSchema, type Signer } from "x402/types";
+import { createNetworkClients, type NetworkClients } from "./superfluid.js";
+import { NETWORK_CONFIGS, ALL_NETWORKS, isNetworkName, type NetworkName } from "./config.js";
 import { CLEAR_MACRO_FORWARDER_ADDRESS, CLEAR_MACRO_FORWARDER_ABI } from "./clearMacro.js";
 
 loadEnv();
@@ -17,12 +20,6 @@ if (!privateKeyEnv) {
   process.exit(1);
 }
 
-const rpcUrl = process.env.BASE_RPC_URL;
-if (!rpcUrl) {
-  console.error("❌ Missing required environment variable: BASE_RPC_URL");
-  process.exit(1);
-}
-
 // Optional environment variables with defaults
 const port = Number(process.env.PORT || 4020);
 const allowedOrigins = process.env.ALLOWED_ORIGIN
@@ -31,12 +28,52 @@ const allowedOrigins = process.env.ALLOWED_ORIGIN
 
 const facilitatorPrivateKey = (privateKeyEnv.startsWith("0x") ? privateKeyEnv : `0x${privateKeyEnv}`) as Hex;
 
-const publicClient = createBasePublicClient(rpcUrl);
-const walletClient = createFacilitatorWalletClient(facilitatorPrivateKey, rpcUrl);
-const facilitatorAccount = walletClient.account;
-const facilitatorAddress = facilitatorAccount.address;
+// Which networks this instance serves. Default: all known networks (multi-network). Override
+// with ENABLED_NETWORKS (comma-separated x402 network names, e.g. "base,base-sepolia") to run
+// a single-network instance. RPC per network comes from BASE_RPC_URL / BASE_SEPOLIA_RPC_URL
+// (each falls back to the network's default public RPC).
+const enabledNetworks: NetworkName[] = (() => {
+  const raw = process.env.ENABLED_NETWORKS;
+  if (!raw) return ALL_NETWORKS;
+  const names = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const invalid = names.filter((n) => !isNetworkName(n));
+  if (invalid.length) {
+    console.error(
+      `❌ ENABLED_NETWORKS has unknown network(s): ${invalid.join(", ")}. Known: ${ALL_NETWORKS.join(", ")}`,
+    );
+    process.exit(1);
+  }
+  return names as NetworkName[];
+})();
 
-// Read a bytes32 view function on the ClearMacroForwarder.
+// Per-network runtime context: chain-bound clients + a settle-capable signer.
+interface NetworkContext {
+  config: (typeof NETWORK_CONFIGS)[NetworkName];
+  clients: NetworkClients;
+  // x402's settle needs a Signer (wallet client + public actions, so it can submit the
+  // transferWithAuthorization and read the receipt). Cast past viem's deep client-type
+  // inference — the same instability that forces the `as never` reads below.
+  settleSigner: Signer;
+}
+
+const networks = new Map<NetworkName, NetworkContext>();
+const networkByChainId = new Map<number, NetworkName>();
+for (const net of enabledNetworks) {
+  const clients = createNetworkClients(net, facilitatorPrivateKey);
+  networks.set(net, {
+    config: NETWORK_CONFIGS[net],
+    clients,
+    settleSigner: clients.walletClient.extend(publicActions) as unknown as Signer,
+  });
+  networkByChainId.set(NETWORK_CONFIGS[net].chain.id, net);
+}
+
+// Same operator EOA on every chain (shared key).
+const facilitatorAddress = privateKeyToAccount(facilitatorPrivateKey).address;
+// The network whose fields populate the back-compat top-level /info shape.
+const primaryNetwork: NetworkName = networks.has("base") ? "base" : enabledNetworks[0];
+
+// Read a bytes32 view function on the ClearMacroForwarder for a given network's client.
 //
 // viem's client-method `readContract` parameter type is computed from a deep, recursive
 // conditional-type chain. Under tighter type-inference budgets (notably Vercel's build) TS
@@ -47,6 +84,7 @@ const facilitatorAddress = facilitatorAccount.address;
 // args, so we cast past the unstable param inference; the `Promise<Hex>` return keeps the
 // call sites type-safe.
 function readForwarderBytes32(
+  publicClient: PublicClient,
   functionName: "getDigest" | "getPermit2WitnessStructHash",
   args: readonly (Address | Hex)[],
 ): Promise<Hex> {
@@ -87,12 +125,24 @@ app.use(
 );
 
 app.get("/info", (c) => {
+  const primary = networks.get(primaryNetwork)!;
   return c.json({
     operator: facilitatorAddress,
-    network: SUPER_TOKEN_CONFIG.chain.networkName,
-    chainId: SUPER_TOKEN_CONFIG.chain.id,
-    superToken: SUPER_TOKEN_CONFIG.superToken.address,
-    underlyingToken: SUPER_TOKEN_CONFIG.underlyingToken.address,
+    // Back-compat single-network fields (reflect the primary network). Multi-network
+    // clients should read the `networks` array below instead.
+    network: primary.config.chain.networkName,
+    chainId: primary.config.chain.id,
+    superToken: primary.config.superToken.address,
+    underlyingToken: primary.config.underlyingToken.address,
+    // Plain x402 "exact" scheme: one-time EIP-3009 USDC payment to the merchant, no stream.
+    x402: {
+      scheme: "exact",
+      network: primary.config.x402.network,
+      asset: primary.config.x402.asset.address,
+      supportedPath: "/supported",
+      verifyPath: "/verify",
+      settlePath: "/settle",
+    },
     clearMacro: {
       forwarder: CLEAR_MACRO_FORWARDER_ADDRESS,
       provider: clearMacroProvider,
@@ -100,6 +150,17 @@ app.get("/info", (c) => {
       permit2RelayPath: "/clearmacro/permit2-relay",
       ...(createFlowMacroAddress ? { macro: createFlowMacroAddress } : {}),
     },
+    // Every network this instance serves. verify/settle route on `network`; clearmacro on `chainId`.
+    networks: enabledNetworks.map((net) => {
+      const ctx = networks.get(net)!;
+      return {
+        network: ctx.config.chain.networkName,
+        chainId: ctx.config.chain.id,
+        superToken: ctx.config.superToken.address,
+        underlyingToken: ctx.config.underlyingToken.address,
+        x402Asset: ctx.config.x402.asset.address,
+      };
+    }),
   });
 });
 
@@ -123,9 +184,14 @@ app.post("/clearmacro/relay", async (c) => {
   }
   const { chainId, macroAddress, signerAddress, payload, signature } = parsed.data;
 
-  if (chainId !== SUPER_TOKEN_CONFIG.chain.id) {
-    return c.json({ error: `Unsupported chain ${chainId} (expected ${SUPER_TOKEN_CONFIG.chain.id})` }, 400);
+  const net = networkByChainId.get(chainId);
+  if (!net) {
+    return c.json(
+      { error: `Unsupported chain ${chainId} (supported: ${[...networkByChainId.keys()].join(", ")})` },
+      400,
+    );
   }
+  const { publicClient, walletClient, account } = networks.get(net)!.clients;
 
   const macro = getAddress(macroAddress);
   if (createFlowMacroAddress && macro !== createFlowMacroAddress) {
@@ -138,7 +204,7 @@ app.post("/clearmacro/relay", async (c) => {
   // Pre-flight: recover the signer from the forwarder's on-chain digest so we never spend
   // gas relaying a runMacro the forwarder would revert with InvalidSignature.
   try {
-    const digest = await readForwarderBytes32("getDigest", [macro, payloadHex]);
+    const digest = await readForwarderBytes32(publicClient, "getDigest", [macro, payloadHex]);
     const recovered = await recoverAddress({ hash: digest, signature: signatureHex });
     if (recovered.toLowerCase() !== signer.toLowerCase()) {
       return c.json({ error: "Signature does not match signer for this payload" }, 400);
@@ -149,7 +215,7 @@ app.post("/clearmacro/relay", async (c) => {
 
   try {
     const txHash = await walletClient.writeContract({
-      account: facilitatorAccount,
+      account,
       chain: undefined,
       address: CLEAR_MACRO_FORWARDER_ADDRESS,
       abi: CLEAR_MACRO_FORWARDER_ABI,
@@ -196,9 +262,14 @@ app.post("/clearmacro/permit2-relay", async (c) => {
   }
   const { chainId, macroAddress, payload, permit2Context: ctx } = parsed.data;
 
-  if (chainId !== SUPER_TOKEN_CONFIG.chain.id) {
-    return c.json({ error: `Unsupported chain ${chainId} (expected ${SUPER_TOKEN_CONFIG.chain.id})` }, 400);
+  const net = networkByChainId.get(chainId);
+  if (!net) {
+    return c.json(
+      { error: `Unsupported chain ${chainId} (supported: ${[...networkByChainId.keys()].join(", ")})` },
+      400,
+    );
   }
+  const { publicClient, walletClient, account } = networks.get(net)!.clients;
   const macro = getAddress(macroAddress);
   if (createFlowMacroAddress && macro !== createFlowMacroAddress) {
     return c.json({ error: "Macro not allowed" }, 403);
@@ -212,7 +283,7 @@ app.post("/clearmacro/permit2-relay", async (c) => {
 
   // Pre-check: the witness must match the on-chain struct hash, else runPermit2AndMacro reverts.
   try {
-    const expectedWitness = await readForwarderBytes32("getPermit2WitnessStructHash", [
+    const expectedWitness = await readForwarderBytes32(publicClient, "getPermit2WitnessStructHash", [
       macro,
       payloadHex,
       upgradeSuperToken,
@@ -243,7 +314,7 @@ app.post("/clearmacro/permit2-relay", async (c) => {
 
   try {
     const txHash = await walletClient.writeContract({
-      account: facilitatorAccount,
+      account,
       chain: undefined,
       address: CLEAR_MACRO_FORWARDER_ADDRESS,
       abi: CLEAR_MACRO_FORWARDER_ABI,
@@ -260,16 +331,103 @@ app.post("/clearmacro/permit2-relay", async (c) => {
 
 
 
+// ── Plain x402 "exact" scheme ────────────────────────────────────────────────
+// A standard, spec-compliant x402 facilitator: no streams, no wrapping. The payer
+// signs an EIP-3009 `transferWithAuthorization` that pays the resource server's
+// `payTo` in full; the facilitator only verifies the signature and (on settle)
+// submits the tx on-chain, paying gas. Any x402 client (x402-axios / x402-fetch)
+// can drive this. Delegates scheme logic to the official `x402` package, which
+// supports both `base` and `base-sepolia`.
+
+// Resolve the network context for an "exact"-scheme request, or return an error string.
+// The network is taken from paymentRequirements.network (per the x402 spec) and must be one
+// this instance serves — that's how a single facilitator handles multiple chains.
+function resolveExact(
+  paymentRequirements: { scheme: string; network: string },
+): { ctx: NetworkContext } | { error: string } {
+  if (paymentRequirements.scheme !== "exact") {
+    return { error: `Unsupported scheme "${paymentRequirements.scheme}" (only "exact")` };
+  }
+  if (!isNetworkName(paymentRequirements.network) || !networks.has(paymentRequirements.network)) {
+    return {
+      error: `Unsupported network "${paymentRequirements.network}" (supported: ${enabledNetworks.join(", ")})`,
+    };
+  }
+  return { ctx: networks.get(paymentRequirements.network)! };
+}
+
+// Advertise which (scheme, network) pairs this facilitator settles — one kind per network.
+app.get("/supported", (c) => {
+  return c.json({
+    kinds: enabledNetworks.map((network) => ({
+      x402Version: 1,
+      scheme: "exact",
+      network,
+    })),
+  });
+});
+
+// Verify a signed payment payload against its requirements — no on-chain write, no gas.
+// The resource server calls this before serving content to confirm the payment is valid.
+app.post("/verify", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = VerifyRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Invalid request", details: parsed.error.flatten() }, 400);
+  }
+  const { paymentPayload, paymentRequirements } = parsed.data;
+
+  const resolved = resolveExact(paymentRequirements);
+  if ("error" in resolved) {
+    return c.json({ isValid: false, invalidReason: resolved.error }, 400);
+  }
+
+  try {
+    const result = await verify(resolved.ctx.clients.publicClient, paymentPayload, paymentRequirements);
+    return c.json(result);
+  } catch (error) {
+    console.error("❌ [/verify] verify failed", { error: `${error}` });
+    return c.json({ isValid: false, invalidReason: `Verification error: ${error}` }, 500);
+  }
+});
+
+// Settle a payment: submit the EIP-3009 transferWithAuthorization on-chain (facilitator
+// pays gas) and return the tx hash. Full amount goes payer → payTo; no fee is taken.
+app.post("/settle", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = SettleRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Invalid request", details: parsed.error.flatten() }, 400);
+  }
+  const { paymentPayload, paymentRequirements } = parsed.data;
+
+  const resolved = resolveExact(paymentRequirements);
+  if ("error" in resolved) {
+    return c.json({ success: false, errorReason: resolved.error }, 400);
+  }
+
+  try {
+    const result = await settle(resolved.ctx.settleSigner, paymentPayload, paymentRequirements);
+    return c.json(result);
+  } catch (error) {
+    console.error("❌ [/settle] settle failed", { error: `${error}` });
+    return c.json({ success: false, errorReason: `Settlement error: ${error}` }, 500);
+  }
+});
+
 // Export handler for Vercel serverless functions
 export default app;
 
 // Only start server if not on Vercel (local development)
 if (!process.env.VERCEL) {
+  const networkLines = enabledNetworks
+    .map((n) => `${NETWORK_CONFIGS[n].chain.name} (${NETWORK_CONFIGS[n].chain.id})`)
+    .join(", ");
   console.log(`
-Superfluid Clear Macro Facilitator
+Superfluid x402 Facilitator (multi-network)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Operator:   ${facilitatorAddress}
-  Network:    ${SUPER_TOKEN_CONFIG.chain.name}
+  Networks:   ${networkLines}
   Provider:   ${clearMacroProvider}
   Macro:      ${createFlowMacroAddress ?? "(any — no allowlist set)"}
   Forwarder:  ${CLEAR_MACRO_FORWARDER_ADDRESS}

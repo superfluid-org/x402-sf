@@ -1,6 +1,6 @@
 # Superfluid x402 Wrapper
 
-**100% [x402 spec-compliant](https://github.com/coinbase/x402/blob/main/specs/x402-specification.md)** facilitator that accepts USDC payments and automatically wraps them to Superfluid USDCx on Base mainnet.
+**100% [x402 spec-compliant](https://github.com/coinbase/x402/blob/main/specs/x402-specification.md)** facilitator on Base (mainnet + Sepolia). Serves plain x402 `"exact"` USDC payments **and** an optional Superfluid path that wraps USDC → USDCx and opens a stream.
 
 ## What is this?
 
@@ -131,90 +131,58 @@ packages/
 
 ## x402 Compliance
 
+The facilitator (`apps/facilitator`) serves two independent payment paths:
+
+1. **Plain x402 `"exact"`** — a standard, one-time USDC payment (EIP-3009
+   `transferWithAuthorization`) that pays the resource server's `payTo` **in full**. No fee, no
+   wrapping, no stream. Works with any x402 client ([`x402-axios`](https://www.npmjs.com/package/x402-axios),
+   `x402-fetch`). This is what most integrators want.
+2. **Clear Macro stream relay** — the value-added Superfluid path that wraps USDC → USDCx and opens a
+   stream from a single signature (the `/clearmacro/*` endpoints below).
+
 ### Endpoints
 
-- **GET `/supported`**: Returns supported payment schemes
-  - Returns: `{ kinds: [{ scheme: "exact", network: "base" }] }`
+**Plain x402 (`"exact"` scheme)** — delegates verification/settlement to the official
+[`x402`](https://www.npmjs.com/package/x402) package:
 
-- **GET `/info`**: Returns facilitator information
-  - Returns: Facilitator address, network, chain ID, token addresses
+- **GET `/supported`** — one entry per served network: `{ kinds: [{ x402Version: 1, scheme: "exact", network }, …] }`
+- **POST `/verify`** — body `{ x402Version, paymentPayload, paymentRequirements }`. Routes on
+  `paymentRequirements.network`, validates the EIP-3009 signature/timing/balance off-chain. Returns
+  `{ isValid, invalidReason?, payer }`. No gas.
+- **POST `/settle`** — same body. Routes on `paymentRequirements.network`, submits the
+  `transferWithAuthorization` on-chain (facilitator pays gas; full amount goes payer → `payTo`) and
+  returns `{ success, transaction, network, payer }`.
+- **GET `/info`** — facilitator address, the advertised `x402` scheme, and a `networks[]` array of
+  every chain served (chainId + token addresses). Top-level fields mirror the primary network for
+  back-compat.
 
-- **GET `/resource`**: Main resource endpoint
-  - **Query Parameters:**
-    - `account` (required): User's wallet address
-    - `recipient` (required): Stream recipient address
-    - `monthlyAmount` (optional): Monthly stream amount in USDC (default: 1 USDC)
-  - **Behavior:**
-    - Checks for existing stream → grants access if found
-    - Otherwise returns 402 with payment requirements
-    - Accepts `X-PAYMENT` header for automatic payment processing
-    - Automatically creates stream after successful payment (if ACL permissions exist)
+**Clear Macro relay (Superfluid streams):**
 
-- **POST `/verify`**: Verifies payment signatures
-  - Validates EIP-3009 signatures before processing
+- **POST `/clearmacro/relay`** — relays a single-signature `runMacro` (e.g. CreateFlowMacro).
+- **POST `/clearmacro/permit2-relay`** — relays a Permit2-bundled `runPermit2AndMacro` (wrap + stream in one tx).
 
-- **POST `/settle`**: Pre-settles payments
-  - Alternative to automatic payment via `X-PAYMENT` header
-  - Supports stream creation via `extra.stream` in payment requirements
+Both clearmacro endpoints route on the request's `chainId`.
 
-### Standard Response (402)
+### Multi-network (Base mainnet + Base Sepolia)
 
-```json
-{
-  "x402Version": 1,
-  "error": "Payment required: Must have an active stream to 0x...",
-  "accepts": [
-    {
-      "scheme": "exact",
-      "network": "base",
-      "maxAmountRequired": "1100000",
-      "asset": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-      "payTo": "<facilitator-address>",
-      "resource": "http://localhost:4020/resource?account=0x...&recipient=0x...",
-      "description": "Wrap 1000000 USDC & start stream to 0x... (100000 USDC fee)",
-      "mimeType": "application/json",
-      "maxTimeoutSeconds": 120,
-      "extra": {
-        "name": "USD Coin",
-        "version": "2",
-        "autoWrap": true,
-        "superToken": "0xd04383398dd2426297da660f9cca3d439af9ce1b",
-        "wrapAmount": "1000000",
-        "fee": "100000",
-        "facilitator": "<facilitator-address>",
-        "cfaV1Forwarder": "<cfa-forwarder-address>",
-        "stream": {
-          "recipient": "0x...",
-          "monthlyAmount": "1000000000000000000",
-          "flowRate": "385802469135802"
-        }
-      }
-    }
-  ]
-}
+A single instance serves **all supported networks at once** and routes each request to the matching
+chain (verify/settle by `paymentRequirements.network`, clearmacro by `chainId`). No per-network
+deployment needed — just fund the operator wallet with gas on each chain you serve.
+
+```bash
+FACILITATOR_PRIVATE_KEY=0x... \
+BASE_RPC_URL=https://rpc-endpoints.superfluid.dev/base-mainnet \
+BASE_SEPOLIA_RPC_URL=https://rpc-endpoints.superfluid.dev/base-sepolia \
+pnpm --filter @super-x402/facilitator dev
 ```
 
-### Success Response (200)
-
-When access is granted (either via existing stream or after payment):
-
-```json
-{
-  "status": "ok",
-  "account": "0x...",
-  "superTokenBalance": "1000000000000000000",
-  "message": "Access granted! Wrapped 1000000 USDC to USDCx and created stream (fee: 100000 USDC)",
-  "transactions": ["0x...", "0x..."],
-  "fee": "100000",
-  "wrapped": "1000000",
-  "streamCreated": true,
-  "streamTxHash": "0x...",
-  "imageUrl": "https://i.imgur.com/k2tPAGC.jpeg"
-}
-```
-
-**Response Headers:**
-- `X-PAYMENT-RESPONSE`: Base64-encoded JSON with payment details (if payment was processed)
+- **`ENABLED_NETWORKS`** (optional, comma-separated) restricts which networks run — e.g.
+  `ENABLED_NETWORKS=base-sepolia` for a testnet-only node. Defaults to all (`base,base-sepolia`).
+- Each network's RPC falls back to a public default if its env var is unset.
+- **Testnet asset:** the plain x402 asset on Base Sepolia is **Circle's testnet USDC**
+  `0x036CbD53842c5426634e7929541eC2318f3dCF7e` (supports EIP-3009; free from the
+  [Circle faucet](https://faucet.circle.com)). The Superfluid `fUSDC` used by the stream path does
+  **not** support EIP-3009, so the two paths use different assets on testnet.
 
 ## Frontend Integration
 
